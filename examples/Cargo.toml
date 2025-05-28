@@ -1,0 +1,13 @@
+[[bin]]
+name = "simple_example"
+path = "simple_example.rs"
+
+[package]
+name = "examples"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+graph-flow = { path = "../graph-flow" }
+tokio = { workspace = true }
+async-trait = { workspace = true } 
