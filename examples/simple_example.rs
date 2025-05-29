@@ -14,14 +14,11 @@ impl Task for HelloTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         let name: String = context.get("name").await.unwrap_or("World".to_string());
         let greeting = format!("Hello, {}!", name);
-        
+
         // Store result for next task
         context.set("greeting", greeting.clone()).await;
-        
-        Ok(TaskResult {
-            response: Some(greeting),
-            next_action: NextAction::Continue,
-        })
+
+        Ok(TaskResult::new(Some(greeting), NextAction::Continue))
     }
 }
 
@@ -37,11 +34,8 @@ impl Task for ExcitementTask {
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         let greeting: String = context.get("greeting").await.unwrap_or_default();
         let excited = format!("{} 🎉✨", greeting);
-        
-        Ok(TaskResult {
-            response: Some(excited),
-            next_action: NextAction::End,
-        })
+
+        Ok(TaskResult::new(Some(excited), NextAction::End))
     }
 }
 
@@ -51,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let graph = GraphBuilder::new("greeting_workflow")
         .add_task(Arc::new(HelloTask))
         .add_task(Arc::new(ExcitementTask))
-        .add_edge("hello", "excitement")  // Connect the tasks
+        .add_edge("hello", "excitement") // Connect the tasks
         .build();
 
     // Set up context with input data
@@ -61,10 +55,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Execute the workflow
     println!("🚀 Starting simple workflow...\n");
     let result = graph.execute("hello", context).await?;
-    
+
     if let Some(response) = result.response {
         println!("✅ Final result: {}", response);
     }
 
     Ok(())
-} 
+}

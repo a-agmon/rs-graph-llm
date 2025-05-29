@@ -33,10 +33,10 @@ mod tests {
             let input: String = context.get("input").await.unwrap_or_default();
             context.set("output", format!("Processed: {}", input)).await;
 
-            Ok(TaskResult {
-                response: Some("Task completed".to_string()),
-                next_action: NextAction::End,
-            })
+            Ok(TaskResult::new(
+                Some("Task completed".to_string()),
+                NextAction::End,
+            ))
         }
     }
 

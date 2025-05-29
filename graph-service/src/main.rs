@@ -144,39 +144,25 @@ async fn execute_graph(
     // Update session based on result
     match &result.next_action {
         graph_flow::NextAction::WaitForInput => {
-            // The graph execution stopped and is waiting for input
-            // We need to figure out which task we're actually on
-            // For now, let's check what tasks have been completed based on context
-            if session
-                .context
-                .get::<crate::tasks::AccountDetails>("account_details")
-                .await
-                .is_some()
-            {
-                // We have account details, so we're on the answer_user_requests task
-                session.current_task_id = "answer_user_requests".to_string();
-            } else if session
-                .context
-                .get::<crate::tasks::UserDetails>("user_details")
-                .await
-                .is_some()
-            {
-                // We have user details but no account details, so we're on fetch_account_details
-                session.current_task_id = "fetch_account_details".to_string();
-            } else {
-                // No user details yet, so we're still on collect_user_details
-                session.current_task_id = "collect_user_details".to_string();
-            }
+            // The task that returned WaitForInput is the one we should continue from
+            session.current_task_id = result.task_id.clone();
         }
         graph_flow::NextAction::GoTo(task_id) => {
+            // The graph execution engine already handled the transition,
+            // but we need to update our session to reflect where we ended up
             session.current_task_id = task_id.clone();
         }
         graph_flow::NextAction::End => {
             // Session completed, could clean up if needed
         }
+        graph_flow::NextAction::Continue => {
+            // This shouldn't happen in our current setup, because Continue should
+            // cause the graph to keep executing until it hits WaitForInput or End.
+            // If we get here, it means the graph execution completed all tasks.
+            // We'll assume we're at the end of the workflow.
+        }
         _ => {
-            // For Continue or other actions, the graph execution should have handled it
-            // Don't change the current_task_id
+            // For other actions (like GoBack), don't change the current_task_id
         }
     }
 

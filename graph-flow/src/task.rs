@@ -10,6 +10,20 @@ pub struct TaskResult {
     pub response: Option<String>,
     /// Next action to take
     pub next_action: NextAction,
+    /// ID of the task that generated this result
+    pub task_id: String,
+}
+
+impl TaskResult {
+    /// Create a new TaskResult with the given response and next action
+    /// The task_id will be set automatically by the graph execution engine
+    pub fn new(response: Option<String>, next_action: NextAction) -> Self {
+        Self {
+            response,
+            next_action,
+            task_id: String::new(),
+        }
+    }
 }
 
 /// Defines what should happen after a task completes
@@ -32,7 +46,7 @@ pub enum NextAction {
 pub trait Task: Send + Sync {
     /// Unique identifier for this task
     fn id(&self) -> &str;
-    
+
     /// Execute the task with the given context
     async fn run(&self, context: Context) -> Result<TaskResult>;
-} 
+}

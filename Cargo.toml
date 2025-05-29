@@ -1,5 +1,10 @@
 [workspace]
-members = [ "graph-cli","graph-flow", "graph-service", "examples"]
+members = [
+    "graph-flow",
+    "graph-service",
+    # "graph-cli",   # removed because the directory no longer exists
+    "examples"
+]
 resolver = "2"
 
 [workspace.dependencies]

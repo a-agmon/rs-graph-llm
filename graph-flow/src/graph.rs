@@ -91,7 +91,10 @@ impl Graph {
             .get(task_id)
             .ok_or_else(|| GraphError::TaskNotFound(task_id.to_string()))?;
 
-        let result = task.run(context.clone()).await?;
+        let mut result = task.run(context.clone()).await?;
+
+        // Set the task_id in the result to track which task generated it
+        result.task_id = task_id.to_string();
 
         // Handle next action
         match &result.next_action {
