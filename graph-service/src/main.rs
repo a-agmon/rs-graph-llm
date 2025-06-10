@@ -1,5 +1,6 @@
 mod tasks;
 
+use crate::tasks::{AnswerUserRequestsTask, CollectUserDetailsTask, FetchAccountDetailsTask};
 use axum::{
     Router,
     extract::{Path, State},
@@ -8,16 +9,16 @@ use axum::{
     routing::{get, post},
 };
 use graph_flow::{
-    Context, Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage,
-    Session, SessionStorage,
+    Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session,
+    SessionStorage, Task,
 };
 use serde::{Deserialize, Serialize};
+use std::any::type_name;
 use std::sync::Arc;
+use tasks::session_keys;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
-
-use crate::tasks::{AnswerUserRequestsTask, CollectUserDetailsTask, FetchAccountDetailsTask};
 
 #[derive(Clone)]
 struct AppState {
@@ -49,6 +50,12 @@ async fn main() {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // Check if API key is available
+    // This is required for LLM-based tasks (CollectUserDetailsTask, AnswerUserRequestsTask)
+    if std::env::var("OPENROUTER_API_KEY").is_err() {
+        error!("OPENROUTER_API_KEY not set");
+        std::process::exit(1);
+    }
     // Create storage instances
     let graph_storage = Arc::new(InMemoryGraphStorage::new());
     let session_storage = Arc::new(InMemorySessionStorage::new());
@@ -90,22 +97,16 @@ async fn execute_graph(
 ) -> Result<Json<ExecuteResponse>, StatusCode> {
     info!("Execute request: {:?}", request);
 
-    // Get or create session
+    // Get or create session id
     let session_id = request
         .session_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
+    // Get or create session
     let mut session = match state.session_storage.get(&session_id).await {
         Ok(Some(session)) => session,
         Ok(None) => {
-            // Create new session with default graph
-            let context = Context::new();
-            Session {
-                id: session_id.clone(),
-                graph_id: "default".to_string(),
-                current_task_id: "collect_user_details".to_string(),
-                context,
-            }
+            Session::new_from_task(session_id.clone(), type_name::<CollectUserDetailsTask>())
         }
         Err(e) => {
             error!("Failed to get session: {}", e);
@@ -113,27 +114,17 @@ async fn execute_graph(
         }
     };
 
-    // Get the graph
-    let graph = match state.graph_storage.get(&session.graph_id).await {
-        Ok(Some(graph)) => graph,
-        Ok(None) => {
-            error!("Graph not found: {}", session.graph_id);
-            return Err(StatusCode::NOT_FOUND);
-        }
-        Err(e) => {
-            error!("Failed to get graph: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    };
+    // set the current user input in the session
+    session
+        .context
+        .set(session_keys::USER_INPUT, request.content)
+        .await;
 
-    // Set the user input in context
-    session.context.set("user_query", request.content).await;
+    // Get or create the relevant graph type id
+    let graph = get_or_create_graph(state.graph_storage.clone()).await?;
 
-    // Execute the graph
-    let result = match graph
-        .execute(&session.current_task_id, session.context.clone())
-        .await
-    {
+    // Execute the the next task in the graph
+    let result = match graph.execute_session(&mut session).await {
         Ok(result) => result,
         Err(e) => {
             error!("Failed to execute graph: {}", e);
@@ -141,32 +132,7 @@ async fn execute_graph(
         }
     };
 
-    // Update session based on result
-    match &result.next_action {
-        graph_flow::NextAction::WaitForInput => {
-            // The task that returned WaitForInput is the one we should continue from
-            session.current_task_id = result.task_id.clone();
-        }
-        graph_flow::NextAction::GoTo(task_id) => {
-            // The graph execution engine already handled the transition,
-            // but we need to update our session to reflect where we ended up
-            session.current_task_id = task_id.clone();
-        }
-        graph_flow::NextAction::End => {
-            // Session completed, could clean up if needed
-        }
-        graph_flow::NextAction::Continue => {
-            // This shouldn't happen in our current setup, because Continue should
-            // cause the graph to keep executing until it hits WaitForInput or End.
-            // If we get here, it means the graph execution completed all tasks.
-            // We'll assume we're at the end of the workflow.
-        }
-        _ => {
-            // For other actions (like GoBack), don't change the current_task_id
-        }
-    }
-
-    // Save updated session
+    // persist the session
     if let Err(e) = state.session_storage.save(session).await {
         error!("Failed to save session: {}", e);
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
@@ -175,7 +141,7 @@ async fn execute_graph(
     Ok(Json(ExecuteResponse {
         session_id,
         response: result.response,
-        status: format!("{:?}", result.next_action),
+        status: format!("{:?}", result.status),
     }))
 }
 
@@ -195,17 +161,43 @@ async fn get_session(
 
 fn create_default_graph() -> Graph {
     let mut builder = GraphBuilder::new("default");
+    let collect_user_details = Arc::new(CollectUserDetailsTask);
+    let fetch_account_details = Arc::new(FetchAccountDetailsTask);
+    let answer_user_requests = Arc::new(AnswerUserRequestsTask);
+
+    // Get task IDs before moving into Arc
+    let collect_id = collect_user_details.id().to_string();
+    let fetch_id = fetch_account_details.id().to_string();
+    let answer_id = answer_user_requests.id().to_string();
 
     // Add tasks
     builder = builder
-        .add_task(Arc::new(CollectUserDetailsTask::new()))
-        .add_task(Arc::new(FetchAccountDetailsTask::new()))
-        .add_task(Arc::new(AnswerUserRequestsTask::new()));
+        .add_task(collect_user_details)
+        .add_task(fetch_account_details)
+        .add_task(answer_user_requests);
 
     // Add edges
     builder = builder
-        .add_edge("collect_user_details", "fetch_account_details")
-        .add_edge("fetch_account_details", "answer_user_requests");
+        .add_edge(collect_id, fetch_id.clone())
+        .add_edge(fetch_id, answer_id);
 
     builder.build()
+}
+
+async fn get_or_create_graph(
+    graph_storage: Arc<dyn GraphStorage>,
+) -> Result<Arc<Graph>, StatusCode> {
+    let graphid = "default";
+    // Get or create the relevant graph type id
+    match graph_storage.get(&graphid).await {
+        Ok(Some(graph)) => Ok(graph),
+        Ok(None) => {
+            error!("Graph not found: {}", graphid);
+            return Err(StatusCode::NOT_FOUND);
+        }
+        Err(e) => {
+            error!("Failed to get graph: {}", e);
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
 }

@@ -24,13 +24,31 @@ impl TaskResult {
             task_id: String::new(),
         }
     }
+
+    pub fn move_to_next() -> Self {
+        Self {
+            response: None,
+            next_action: NextAction::Continue,
+            task_id: String::new(),
+        }
+    }
+
+    pub fn move_to_next_direct() -> Self {
+        Self {
+            response: None,
+            next_action: NextAction::ContinueAndExecute,
+            task_id: String::new(),
+        }
+    }
 }
 
 /// Defines what should happen after a task completes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NextAction {
-    /// Continue to the next task in the default path
+    /// Continue to the next task in the default path (wait for user input)
     Continue,
+    /// Continue to the next task and execute it immediately (old recursive behavior)
+    ContinueAndExecute,
     /// Go to a specific task by ID
     GoTo(String),
     /// Go back to the previous task

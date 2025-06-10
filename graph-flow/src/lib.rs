@@ -7,7 +7,7 @@ pub mod task;
 // Re-export commonly used types
 pub use context::Context;
 pub use error::{GraphError, Result};
-pub use graph::{Graph, GraphBuilder};
+pub use graph::{ExecutionResult, ExecutionStatus, Graph, GraphBuilder};
 pub use storage::{
     GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session, SessionStorage,
 };

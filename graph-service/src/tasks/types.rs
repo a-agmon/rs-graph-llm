@@ -14,3 +14,11 @@ pub struct AccountDetails {
     pub account_type: String,
     pub last_transaction: String,
 }
+
+// create  a mod with all the types instead of strings
+pub mod session_keys {
+    pub const USER_INPUT: &str = "user_input";
+    pub const CHAT_HISTORY: &str = "chat_history";
+    pub const USER_DETAILS: &str = "user_details";
+    pub const ACCOUNT_DETAILS: &str = "account_details";
+}

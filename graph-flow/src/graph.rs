@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use crate::{
     context::Context,
     error::{GraphError, Result},
+    storage::Session,
     task::{NextAction, Task, TaskResult},
 };
 
@@ -84,6 +85,133 @@ impl Graph {
         self
     }
 
+    /// Execute the graph with session management
+    /// This method manages the session state and returns a simple status
+    pub async fn execute_session(&self, session: &mut Session) -> Result<ExecutionResult> {
+        // Execute ONLY the current task (not the full recursive chain)
+        let result = self
+            .execute_single_task(&session.current_task_id, session.context.clone())
+            .await?;
+
+        // Handle next action at the session level
+        match &result.next_action {
+            NextAction::Continue => {
+                // Find the next task but don't execute it
+                if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
+                    session.current_task_id = next_task_id;
+                } else {
+                    // No next task found, stay at current task
+                    session.current_task_id = result.task_id.clone();
+                }
+
+                Ok(ExecutionResult {
+                    response: result.response,
+                    status: ExecutionStatus::WaitingForInput,
+                })
+            }
+            NextAction::ContinueAndExecute => {
+                // Find the next task and execute it immediately (recursive behavior)
+                if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
+                    // Recursively execute from the next task
+                    let recursive_result =
+                        self.execute(&next_task_id, session.context.clone()).await?;
+
+                    // Update session to the appropriate task
+                    match &recursive_result.next_action {
+                        NextAction::Continue => {
+                            // If the result task wants to continue, find its next task
+                            if let Some(next_task_after_result) =
+                                self.find_next_task(&recursive_result.task_id, &session.context)
+                            {
+                                session.current_task_id = next_task_after_result;
+                            } else {
+                                session.current_task_id = recursive_result.task_id.clone();
+                            }
+                        }
+                        _ => {
+                            // For other actions, use the task that generated the result
+                            session.current_task_id = recursive_result.task_id.clone();
+                        }
+                    }
+
+                    // Return the result from the final executed task
+                    let execution_result = match &recursive_result.next_action {
+                        NextAction::WaitForInput => ExecutionResult {
+                            response: recursive_result.response,
+                            status: ExecutionStatus::WaitingForInput,
+                        },
+                        NextAction::End => ExecutionResult {
+                            response: recursive_result.response,
+                            status: ExecutionStatus::Completed,
+                        },
+                        _ => ExecutionResult {
+                            response: recursive_result.response,
+                            status: ExecutionStatus::WaitingForInput,
+                        },
+                    };
+
+                    Ok(execution_result)
+                } else {
+                    // No next task found, stay at current task
+                    session.current_task_id = result.task_id.clone();
+                    Ok(ExecutionResult {
+                        response: result.response,
+                        status: ExecutionStatus::WaitingForInput,
+                    })
+                }
+            }
+            NextAction::WaitForInput => {
+                // Stay at the current task
+                session.current_task_id = result.task_id.clone();
+                Ok(ExecutionResult {
+                    response: result.response,
+                    status: ExecutionStatus::WaitingForInput,
+                })
+            }
+            NextAction::End => {
+                session.current_task_id = result.task_id.clone();
+                Ok(ExecutionResult {
+                    response: result.response,
+                    status: ExecutionStatus::Completed,
+                })
+            }
+            NextAction::GoTo(target_id) => {
+                if self.tasks.contains_key(target_id) {
+                    session.current_task_id = target_id.clone();
+                    Ok(ExecutionResult {
+                        response: result.response,
+                        status: ExecutionStatus::WaitingForInput,
+                    })
+                } else {
+                    Err(GraphError::TaskNotFound(target_id.clone()))
+                }
+            }
+            NextAction::GoBack => {
+                // For now, stay at current task - could implement back navigation logic later
+                session.current_task_id = result.task_id.clone();
+                Ok(ExecutionResult {
+                    response: result.response,
+                    status: ExecutionStatus::WaitingForInput,
+                })
+            }
+        }
+    }
+
+    /// Execute a single task without following Continue actions
+    async fn execute_single_task(&self, task_id: &str, context: Context) -> Result<TaskResult> {
+        let task = self
+            .tasks
+            .get(task_id)
+            .ok_or_else(|| GraphError::TaskNotFound(task_id.to_string()))?;
+
+        let mut result = task.run(context).await?;
+
+        // Set the task_id in the result to track which task generated it
+        result.task_id = task_id.to_string();
+
+        Ok(result)
+    }
+
     /// Execute the graph starting from a specific task
     pub async fn execute(&self, task_id: &str, context: Context) -> Result<TaskResult> {
         let task = self
@@ -99,11 +227,17 @@ impl Graph {
         // Handle next action
         match &result.next_action {
             NextAction::Continue => {
-                // Find the next task based on edges
-                if let Some(next_task_id) = self.find_next_task(task_id, &context) {
-                    Box::pin(self.execute(&next_task_id, context)).await
-                } else {
+                // If this task has a response, stop here and don't continue to next task
+                // This allows the response to be returned to the user
+                if result.response.is_some() {
                     Ok(result)
+                } else {
+                    // Find the next task based on edges
+                    if let Some(next_task_id) = self.find_next_task(task_id, &context) {
+                        Box::pin(self.execute(&next_task_id, context)).await
+                    } else {
+                        Ok(result)
+                    }
                 }
             }
             NextAction::GoTo(target_id) => {
@@ -191,4 +325,21 @@ impl GraphBuilder {
     pub fn build(self) -> Graph {
         self.graph
     }
+}
+
+/// Status of graph execution
+#[derive(Debug, Clone)]
+pub struct ExecutionResult {
+    pub response: Option<String>,
+    pub status: ExecutionStatus,
+}
+
+#[derive(Debug, Clone)]
+pub enum ExecutionStatus {
+    /// Waiting for user input to continue
+    WaitingForInput,
+    /// Workflow completed successfully
+    Completed,
+    /// Error occurred during execution
+    Error(String),
 }

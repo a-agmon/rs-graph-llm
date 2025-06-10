@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use uuid::Uuid;
 
-use crate::{error::Result, graph::Graph};
+use crate::{Context, error::Result, graph::Graph};
 
 /// Session information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,6 +14,17 @@ pub struct Session {
     pub current_task_id: String,
     #[serde(skip)]
     pub context: crate::context::Context,
+}
+
+impl Session {
+    pub fn new_from_task(sid: String, task_name: &str) -> Self {
+        Self {
+            id: sid,
+            graph_id: "default".to_string(),
+            current_task_id: task_name.to_string(),
+            context: Context::new(),
+        }
+    }
 }
 
 /// Trait for storing and retrieving graphs

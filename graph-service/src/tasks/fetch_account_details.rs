@@ -2,31 +2,24 @@ use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Result, Task, TaskResult};
 use tracing::info;
 
+use crate::tasks::session_keys;
+
 use super::{types::UserDetails, utils::fetch_account_details};
 
 /// Task that fetches account details using the collected user information
-pub struct FetchAccountDetailsTask {
-    id: String,
-}
-
-impl FetchAccountDetailsTask {
-    pub fn new() -> Self {
-        Self {
-            id: "fetch_account_details".to_string(),
-        }
-    }
-}
+pub struct FetchAccountDetailsTask;
 
 #[async_trait]
 impl Task for FetchAccountDetailsTask {
     fn id(&self) -> &str {
-        &self.id
+        std::any::type_name::<Self>()
     }
 
     async fn run(&self, context: Context) -> Result<TaskResult> {
-        info!("running task: {}", self.id);
+        info!("running task: {}", self.id());
+
         let user_details: UserDetails = context
-            .get("user_details")
+            .get(session_keys::USER_DETAILS)
             .await
             .ok_or_else(|| GraphError::ContextError("user_details not found".to_string()))?;
 
@@ -49,17 +42,16 @@ impl Task for FetchAccountDetailsTask {
 
         // Store account details in context
         context
-            .set("account_details", account_details.clone())
+            .set(session_keys::ACCOUNT_DETAILS, account_details.clone())
             .await;
 
-        Ok(TaskResult::new(
-            Some(format!(
-                "Account details retrieved successfully! Your {} account ending in {} has a balance of ${:.2}. How can I help you today?",
-                account_details.account_type,
-                &bank_number[bank_number.len() - 4..],
-                account_details.account_balance
-            )),
-            NextAction::Continue,
-        ))
+        let response = format!(
+            "Account details retrieved successfully! Your {} account ending in {} has a balance of ${:.2}. How can I help you today?",
+            account_details.account_type,
+            &bank_number[bank_number.len() - 4..],
+            account_details.account_balance
+        );
+
+        Ok(TaskResult::new(Some(response), NextAction::Continue))
     }
 }
