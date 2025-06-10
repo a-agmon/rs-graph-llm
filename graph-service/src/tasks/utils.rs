@@ -1,7 +1,4 @@
 use rig::{agent::Agent, providers::openrouter};
-use tracing::info;
-
-use super::types::AccountDetails;
 
 pub fn get_llm_agent(prompt: &str) -> anyhow::Result<Agent<openrouter::CompletionModel>> {
     let api_key = std::env::var("OPENROUTER_API_KEY")
@@ -11,27 +8,17 @@ pub fn get_llm_agent(prompt: &str) -> anyhow::Result<Agent<openrouter::Completio
     Ok(agent)
 }
 
-pub async fn fetch_account_details(
-    username: &str,
-    bank_number: &str,
-) -> anyhow::Result<AccountDetails> {
-    // Simulate API call to banking system
-    // In a real implementation, this would call an actual banking API
-
-    info!(
-        "Simulating account fetch for {} - {}",
-        username, bank_number
-    );
-
-    // Simulate some processing time
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-    // Return mock account details
-    Ok(AccountDetails {
-        username: username.to_string(),
-        bank_number: bank_number.to_string(),
-        account_balance: 2547.83,
-        account_type: "Checking".to_string(),
-        last_transaction: "Grocery Store - $45.67 on 2024-01-15".to_string(),
-    })
+/// Extract cost amount from text using simple parsing
+pub fn extract_cost_from_text(text: &str) -> Option<f64> {
+    // Look for patterns like $1000, $1,000.00, 1000, etc.
+    let re = regex::Regex::new(r"[\$]?([0-9,]+\.?[0-9]*)")
+        .expect("Invalid regex");
+    
+    if let Some(caps) = re.captures(text) {
+        if let Some(amount_str) = caps.get(1) {
+            let cleaned = amount_str.as_str().replace(",", "");
+            return cleaned.parse::<f64>().ok();
+        }
+    }
+    None
 }

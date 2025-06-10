@@ -1,7 +1,10 @@
 mod chat_bridge;
 mod tasks;
 
-use crate::tasks::{AnswerUserRequestsTask, CollectUserDetailsTask, FetchAccountDetailsTask};
+use crate::tasks::{
+    InitialClaimQueryTask, InsuranceTypeClassifierTask, CarInsuranceDetailsTask,
+    ApartmentInsuranceDetailsTask, SmartClaimValidatorTask, FinalSummaryTask,
+};
 use axum::{
     Router,
     extract::{Path, State},
@@ -122,7 +125,7 @@ async fn execute_graph(
                 error!("Session not found: {}", session_id);
                 return Err(StatusCode::NOT_FOUND);
             }
-            Session::new_from_task(session_id.clone(), type_name::<CollectUserDetailsTask>())
+            Session::new_from_task(session_id.clone(), type_name::<InitialClaimQueryTask>())
         }
         Err(e) => {
             error!("Failed to get session: {}", e);
@@ -176,26 +179,66 @@ async fn get_session(
 }
 
 fn create_default_graph() -> Graph {
-    let mut builder = GraphBuilder::new("default");
-    let collect_user_details = Arc::new(CollectUserDetailsTask);
-    let fetch_account_details = Arc::new(FetchAccountDetailsTask);
-    let answer_user_requests = Arc::new(AnswerUserRequestsTask);
+    use crate::tasks::session_keys;
 
-    // Get task IDs before moving into Arc
-    let collect_id = collect_user_details.id().to_string();
-    let fetch_id = fetch_account_details.id().to_string();
-    let answer_id = answer_user_requests.id().to_string();
+    let mut builder = GraphBuilder::new("simplified_insurance_claims");
+    
+    // Create simplified task instances
+    let initial_claim_query = Arc::new(InitialClaimQueryTask);
+    let insurance_type_classifier = Arc::new(InsuranceTypeClassifierTask);
+    let car_insurance_details = Arc::new(CarInsuranceDetailsTask);
+    let apartment_insurance_details = Arc::new(ApartmentInsuranceDetailsTask);
+    let smart_claim_validator = Arc::new(SmartClaimValidatorTask);
+    let final_summary = Arc::new(FinalSummaryTask);
 
-    // Add tasks
+    // Get task IDs
+    let initial_id = initial_claim_query.id().to_string();
+    let classifier_id = insurance_type_classifier.id().to_string();
+    let car_details_id = car_insurance_details.id().to_string();
+    let apartment_details_id = apartment_insurance_details.id().to_string();
+    let smart_validator_id = smart_claim_validator.id().to_string();
+    let final_summary_id = final_summary.id().to_string();
+
+    // Add all tasks to the simplified graph
     builder = builder
-        .add_task(collect_user_details)
-        .add_task(fetch_account_details)
-        .add_task(answer_user_requests);
+        .add_task(initial_claim_query)
+        .add_task(insurance_type_classifier)
+        .add_task(car_insurance_details)
+        .add_task(apartment_insurance_details)
+        .add_task(smart_claim_validator)
+        .add_task(final_summary);
 
-    // Add edges
+    // Linear flow from initial query to classifier
+    builder = builder.add_edge(initial_id, classifier_id.clone());
+
+    // Conditional routing from classifier to specific details collectors
+    builder = builder.add_conditional_edge(
+        classifier_id.clone(),
+        car_details_id.clone(),
+        |context| {
+            context.get_sync::<String>(session_keys::INSURANCE_TYPE)
+                .map(|t| t == "car")
+                .unwrap_or(false)
+        }
+    );
+
+    builder = builder.add_conditional_edge(
+        classifier_id,
+        apartment_details_id.clone(),
+        |context| {
+            context.get_sync::<String>(session_keys::INSURANCE_TYPE)
+                .map(|t| t == "apartment")
+                .unwrap_or(false)
+        }
+    );
+
+    // Both details collectors flow to smart validator
     builder = builder
-        .add_edge(collect_id, fetch_id.clone())
-        .add_edge(fetch_id, answer_id);
+        .add_edge(car_details_id, smart_validator_id.clone())
+        .add_edge(apartment_details_id, smart_validator_id.clone());
+
+    // Smart validator flows to final summary
+    builder = builder.add_edge(smart_validator_id, final_summary_id);
 
     builder.build()
 }
