@@ -180,6 +180,19 @@ impl Context {
         self.data.clear();
     }
 
+    /// Synchronous version of get for use in edge conditions
+    pub fn get_sync<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+        self.data
+            .get(key)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
+    /// Synchronous version of set for use when async is not available
+    pub fn set_sync(&self, key: impl Into<String>, value: impl serde::Serialize) {
+        let value = serde_json::to_value(value).expect("Failed to serialize value");
+        self.data.insert(key.into(), value);
+    }
+
     // Chat history methods
 
     /// Add a user message to the chat history
