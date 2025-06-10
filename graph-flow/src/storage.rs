@@ -13,7 +13,6 @@ pub struct Session {
     pub current_task_id: String,
     /// Optional status message from the last executed task
     pub status_message: Option<String>,
-    #[serde(skip)]
     pub context: crate::context::Context,
 }
 
