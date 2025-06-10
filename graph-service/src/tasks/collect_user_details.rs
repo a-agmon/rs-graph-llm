@@ -28,6 +28,32 @@ IF YOU HAVE BOTH username AND bank_number, respond with ONLY this JSON:
 IF MISSING INFO, ask for what's needed.
 "#;
 
+/// Attempts to parse UserDetails from LLM response
+/// First tries direct JSON parsing, then extracts JSON block if needed
+fn parse_user_details_from_response(response: &str) -> Option<UserDetails> {
+    // Try parsing entire response as JSON first
+    if let Ok(details) = serde_json::from_str::<UserDetails>(response) {
+        info!("Parsed response as direct JSON: {:?}", details);
+        return Some(details);
+    }
+
+    // Extract JSON block from response if direct parsing fails
+    let start = response.find('{')?;
+    let end = response.rfind('}')?;
+    let json_str = &response[start..=end];
+    
+    match serde_json::from_str::<UserDetails>(json_str) {
+        Ok(details) => {
+            info!("Extracted and parsed JSON from response: {:?}", details);
+            Some(details)
+        }
+        Err(e) => {
+            info!("Failed to parse JSON from response: {}", e);
+            None
+        }
+    }
+}
+
 /// Task that collects user details (username and bank number)
 /// May require multiple interactions if user provides incomplete information
 pub struct CollectUserDetailsTask;
@@ -71,7 +97,11 @@ impl Task for CollectUserDetailsTask {
         context.set(session_keys::CHAT_HISTORY, chat_history).await;
 
         // Try to parse JSON from response to check if we have complete details
-        if let Ok(user_details) = serde_json::from_str::<UserDetails>(&response) {
+        let user_details = parse_user_details_from_response(&response);
+
+        if let Some(user_details) = user_details {
+            info!("Checking if details are complete: username={:?}, bank_number={:?}",
+                  user_details.username, user_details.bank_number);
             if user_details.username.is_some() && user_details.bank_number.is_some() {
                 // We have complete details, store them and continue
                 context
@@ -82,12 +112,24 @@ impl Task for CollectUserDetailsTask {
                     user_details.username, user_details.bank_number
                 );
 
-                return Ok(TaskResult::new(None, NextAction::ContinueAndExecute));
+                let status_message = format!(
+                    "User details collection completed - Username: {}, Bank number: {}",
+                    user_details.username.as_ref().unwrap(),
+                    user_details.bank_number.as_ref().unwrap()
+                );
+
+                info!("Moving to next task with status: {}", status_message);
+                return Ok(TaskResult::new_with_status(None, NextAction::ContinueAndExecute, Some(status_message)));
+            } else {
+                info!("Details incomplete, staying in collection phase");
             }
+        } else {
+            info!("No valid user details found in response");
         }
 
         // If we don't have complete details or couldn't parse JSON,
         // the response should be a guiding question
-        Ok(TaskResult::new(Some(response), NextAction::WaitForInput))
+        let status_message = "Collecting user details - waiting for complete username and bank number".to_string();
+        Ok(TaskResult::new_with_status(Some(response), NextAction::WaitForInput, Some(status_message)))
     }
 }

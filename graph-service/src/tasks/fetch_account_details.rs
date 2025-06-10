@@ -52,6 +52,13 @@ impl Task for FetchAccountDetailsTask {
             account_details.account_balance
         );
 
-        Ok(TaskResult::new(Some(response), NextAction::Continue))
+        let status_message = format!(
+            "Successfully fetched account details for user {} - {} account with balance ${:.2}",
+            username,
+            account_details.account_type,
+            account_details.account_balance
+        );
+
+        Ok(TaskResult::new_with_status(Some(response), NextAction::Continue, Some(status_message)))
     }
 }
