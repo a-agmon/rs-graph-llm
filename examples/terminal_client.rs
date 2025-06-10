@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let client = Client::new();
     let mut session_id = args.session_id;
-    let mut first = true;
+    let _first = true;
     let mut content = args.content;
     let url = args.url;
 

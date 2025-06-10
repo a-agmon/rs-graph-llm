@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Result, Task, TaskResult};
-use rig::completion::{Chat, Message};
+use rig::completion::Chat;
 use tracing::info;
 
-use crate::tasks::session_keys;
+use crate::{chat_bridge::ContextRigExt, tasks::session_keys};
 
 use super::{types::UserDetails, utils::get_llm_agent};
 
@@ -74,27 +74,21 @@ impl Task for CollectUserDetailsTask {
 
         info!("Collecting user details from input: {}", user_input);
 
-        // Get message history from context (if any)
-        let mut chat_history: Vec<Message> = context
-            .get(session_keys::CHAT_HISTORY)
-            .await
-            .unwrap_or_default();
+        // Get message history from context in rig format
+        let chat_history = context.get_rig_messages().await;
 
         // Create agent with collection prompt
         let agent = get_llm_agent(COLLECT_USER_DETAILS_PROMPT)?;
 
         // Use chat to get response with history
         let response = agent
-            .chat(&user_input, chat_history.clone())
+            .chat(&user_input, chat_history)
             .await
             .map_err(|e| GraphError::TaskExecutionFailed(e.to_string()))?;
 
-        // Add user message and assistant response to history
-        chat_history.push(Message::user(user_input));
-        chat_history.push(Message::assistant(response.clone()));
-
-        // Store updated chat history
-        context.set(session_keys::CHAT_HISTORY, chat_history).await;
+        // Add user message and assistant response to chat history
+        context.add_user_message(user_input.clone()).await;
+        context.add_assistant_message(response.clone()).await;
 
         // Try to parse JSON from response to check if we have complete details
         let user_details = parse_user_details_from_response(&response);

@@ -1,3 +1,4 @@
+mod chat_bridge;
 mod tasks;
 
 use crate::tasks::{AnswerUserRequestsTask, CollectUserDetailsTask, FetchAccountDetailsTask};
@@ -106,11 +107,9 @@ async fn execute_graph(
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
     // Validate session ID format if provided
-    if session_id_provided {
-        if let Err(_) = Uuid::parse_str(&session_id) {
-            error!("Invalid session ID format: {}", session_id);
-            return Err(StatusCode::BAD_REQUEST);
-        }
+    if session_id_provided && Uuid::parse_str(&session_id).is_err() {
+        error!("Invalid session ID format: {}", session_id);
+        return Err(StatusCode::BAD_REQUEST);
     }
 
     // Get or create session
@@ -206,15 +205,15 @@ async fn get_or_create_graph(
 ) -> Result<Arc<Graph>, StatusCode> {
     let graphid = "default";
     // Get or create the relevant graph type id
-    match graph_storage.get(&graphid).await {
+    match graph_storage.get(graphid).await {
         Ok(Some(graph)) => Ok(graph),
         Ok(None) => {
             error!("Graph not found: {}", graphid);
-            return Err(StatusCode::NOT_FOUND);
+            Err(StatusCode::NOT_FOUND)
         }
         Err(e) => {
             error!("Failed to get graph: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
 }

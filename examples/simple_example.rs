@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use graph_flow::{Context, Graph, GraphBuilder, NextAction, Task, TaskResult};
+use graph_flow::{Context, GraphBuilder, NextAction, Task, TaskResult};
 use std::sync::Arc;
 
 // Define a simple task that adds "Hello" to the input

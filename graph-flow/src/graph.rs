@@ -8,12 +8,15 @@ use crate::{
     task::{NextAction, Task, TaskResult},
 };
 
+/// Type alias for edge condition functions
+pub type EdgeCondition = Arc<dyn Fn(&Context) -> bool + Send + Sync>;
+
 /// Edge between tasks in the graph
 #[derive(Clone)]
 pub struct Edge {
     pub from: String,
     pub to: String,
-    pub condition: Option<Arc<dyn Fn(&Context) -> bool + Send + Sync>>,
+    pub condition: Option<EdgeCondition>,
 }
 
 /// A graph of tasks that can be executed
@@ -96,6 +99,9 @@ impl Graph {
         // Handle next action at the session level
         match &result.next_action {
             NextAction::Continue => {
+                // Update session status message if provided
+                session.status_message = result.status_message.clone();
+                
                 // Find the next task but don't execute it
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
                     session.current_task_id = next_task_id;
@@ -110,11 +116,17 @@ impl Graph {
                 })
             }
             NextAction::ContinueAndExecute => {
+                // Update session status message if provided
+                session.status_message = result.status_message.clone();
+                
                 // Find the next task and execute it immediately (recursive behavior)
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
                     // Recursively execute from the next task
                     let recursive_result =
                         self.execute(&next_task_id, session.context.clone()).await?;
+
+                    // Update session status message from the final result
+                    session.status_message = recursive_result.status_message.clone();
 
                     // Update session to the appropriate task
                     match &recursive_result.next_action {
@@ -161,6 +173,8 @@ impl Graph {
                 }
             }
             NextAction::WaitForInput => {
+                // Update session status message if provided
+                session.status_message = result.status_message.clone();
                 // Stay at the current task
                 session.current_task_id = result.task_id.clone();
                 Ok(ExecutionResult {
@@ -169,6 +183,8 @@ impl Graph {
                 })
             }
             NextAction::End => {
+                // Update session status message if provided
+                session.status_message = result.status_message.clone();
                 session.current_task_id = result.task_id.clone();
                 Ok(ExecutionResult {
                     response: result.response,
@@ -176,6 +192,8 @@ impl Graph {
                 })
             }
             NextAction::GoTo(target_id) => {
+                // Update session status message if provided
+                session.status_message = result.status_message.clone();
                 if self.tasks.contains_key(target_id) {
                     session.current_task_id = target_id.clone();
                     Ok(ExecutionResult {
@@ -187,6 +205,8 @@ impl Graph {
                 }
             }
             NextAction::GoBack => {
+                // Update session status message if provided
+                session.status_message = result.status_message.clone();
                 // For now, stay at current task - could implement back navigation logic later
                 session.current_task_id = result.task_id.clone();
                 Ok(ExecutionResult {

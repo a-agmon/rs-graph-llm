@@ -5,7 +5,7 @@ pub mod storage;
 pub mod task;
 
 // Re-export commonly used types
-pub use context::Context;
+pub use context::{ChatHistory, Context, MessageRole, SerializableMessage};
 pub use error::{GraphError, Result};
 pub use graph::{ExecutionResult, ExecutionStatus, Graph, GraphBuilder};
 pub use storage::{
@@ -78,6 +78,7 @@ mod tests {
             id: "session1".to_string(),
             graph_id: "test".to_string(),
             current_task_id: "task1".to_string(),
+            status_message: None,
             context: Context::new(),
         };
 

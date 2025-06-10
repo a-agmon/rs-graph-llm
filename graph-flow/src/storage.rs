@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::{Context, error::Result, graph::Graph};
 
@@ -12,6 +11,8 @@ pub struct Session {
     pub id: String,
     pub graph_id: String,
     pub current_task_id: String,
+    /// Optional status message from the last executed task
+    pub status_message: Option<String>,
     #[serde(skip)]
     pub context: crate::context::Context,
 }
@@ -22,6 +23,7 @@ impl Session {
             id: sid,
             graph_id: "default".to_string(),
             current_task_id: task_name.to_string(),
+            status_message: None,
             context: Context::new(),
         }
     }
@@ -46,6 +48,12 @@ pub trait SessionStorage: Send + Sync {
 /// In-memory implementation of GraphStorage
 pub struct InMemoryGraphStorage {
     graphs: Arc<DashMap<String, Arc<Graph>>>,
+}
+
+impl Default for InMemoryGraphStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemoryGraphStorage {
@@ -76,6 +84,12 @@ impl GraphStorage for InMemoryGraphStorage {
 /// In-memory implementation of SessionStorage
 pub struct InMemorySessionStorage {
     sessions: Arc<DashMap<String, Session>>,
+}
+
+impl Default for InMemorySessionStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemorySessionStorage {

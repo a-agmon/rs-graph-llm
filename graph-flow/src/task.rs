@@ -12,6 +12,8 @@ pub struct TaskResult {
     pub next_action: NextAction,
     /// ID of the task that generated this result
     pub task_id: String,
+    /// Optional status message that describes the current state of the task
+    pub status_message: Option<String>,
 }
 
 impl TaskResult {
@@ -22,6 +24,17 @@ impl TaskResult {
             response,
             next_action,
             task_id: String::new(),
+            status_message: None,
+        }
+    }
+
+    /// Create a new TaskResult with response, next action, and status message
+    pub fn new_with_status(response: Option<String>, next_action: NextAction, status_message: Option<String>) -> Self {
+        Self {
+            response,
+            next_action,
+            task_id: String::new(),
+            status_message,
         }
     }
 
@@ -30,6 +43,7 @@ impl TaskResult {
             response: None,
             next_action: NextAction::Continue,
             task_id: String::new(),
+            status_message: None,
         }
     }
 
@@ -38,6 +52,7 @@ impl TaskResult {
             response: None,
             next_action: NextAction::ContinueAndExecute,
             task_id: String::new(),
+            status_message: None,
         }
     }
 }

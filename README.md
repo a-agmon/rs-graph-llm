@@ -15,6 +15,8 @@ The project is organized as a workspace with two main components:
 - **LLM Integration**: Built-in support for LLM interactions using the Rig crate with OpenRouter
 - **Conditional edges**: Create dynamic workflows with conditional branching
 - **Session management**: Maintain state across multiple interactions
+- **Chat History Management**: Built-in serializable chat history separated from context variables
+- **Full Serialization**: Both context and chat history are fully serializable for persistence
 - **Storage abstraction**: Pluggable storage backends (in-memory by default)
 - **Type-safe**: Leverages Rust's type system for safe graph construction
 
@@ -147,14 +149,96 @@ The platform uses trait-based storage abstractions:
 
 Default implementations use in-memory storage, but you can implement these traits for any backend (Redis, PostgreSQL, etc.).
 
-## Message History
+## Chat History Management
 
-Tasks can access and store conversation history through the Context:
+The platform provides built-in chat history management with full serialization support. Chat history is separated from regular context variables and provides a clean API for conversation management.
+
+### Using Chat History in Tasks
 
 ```rust
-// In a task
-context.set("messages", messages).await;
-let messages: Vec<Message> = context.get("messages").await.unwrap_or_default();
+use graph_flow::{Context, SerializableMessage, MessageRole};
+
+// In a task implementation
+async fn run(&self, context: Context) -> Result<TaskResult> {
+    // Add messages to chat history
+    context.add_user_message("Hello!".to_string()).await;
+    context.add_assistant_message("Hi there!".to_string()).await;
+    context.add_system_message("System notification".to_string()).await;
+    
+    // Get chat history
+    let history = context.get_chat_history().await;
+    println!("Chat has {} messages", history.len());
+    
+    // Get recent messages
+    let last_5 = context.get_last_messages(5).await;
+    
+    // Clear chat history if needed
+    context.clear_chat_history().await;
+    
+    Ok(TaskResult::new(Some("Response".to_string()), NextAction::Continue))
+}
+```
+
+### Chat History with LLM Integration
+
+For tasks that use LLM agents with rig, use the `ContextRigExt` trait:
+
+```rust
+use crate::chat_bridge::ContextRigExt;
+use rig::completion::Chat;
+
+// In a task that uses LLM
+async fn run(&self, context: Context) -> Result<TaskResult> {
+    let user_input = "User's question";
+    
+    // Get chat history in rig format for LLM
+    let chat_history = context.get_rig_messages().await;
+    
+    // Use with LLM agent
+    let agent = get_llm_agent("Your prompt")?;
+    let response = agent.chat(&user_input, chat_history).await?;
+    
+    // Store the conversation
+    context.add_user_message(user_input.to_string()).await;
+    context.add_assistant_message(response.clone()).await;
+    
+    Ok(TaskResult::new(Some(response), NextAction::Continue))
+}
+```
+
+### Chat History Types
+
+```rust
+use graph_flow::{SerializableMessage, MessageRole, ChatHistory};
+
+// Create messages manually
+let user_msg = SerializableMessage::user("Hello".to_string());
+let assistant_msg = SerializableMessage::assistant("Hi!".to_string());
+let system_msg = SerializableMessage::system("System alert".to_string());
+
+// Create chat history with message limit
+let mut history = ChatHistory::with_max_messages(100);
+history.add_user_message("Message content".to_string());
+```
+
+### Context Serialization
+
+Both regular context data and chat history are fully serializable:
+
+```rust
+use graph_flow::Context;
+
+// Context automatically serializes both data and chat history
+let context = Context::new();
+context.set("key", "value").await;
+context.add_user_message("Hello".to_string()).await;
+
+// Serialize the entire context (including chat history)
+let serialized = serde_json::to_string(&context).unwrap();
+
+// Deserialize back
+let restored: Context = serde_json::from_str(&serialized).unwrap();
+assert_eq!(restored.chat_history_len().await, 1);
 ```
 
 ## Development
@@ -169,13 +253,33 @@ cargo test
 cargo build --release
 ```
 
+## Recent Updates
+
+### Chat History Refactoring (Latest)
+
+- **Separated Chat History**: Chat history is now separated from regular context variables with dedicated storage
+- **Full Serialization**: Both context data and chat history are completely serializable for session persistence
+- **New Chat API**: Clean, semantic methods for chat management (`add_user_message`, `get_chat_history`, etc.)
+- **LLM Bridge**: Seamless integration with rig library through `ContextRigExt` trait
+- **Type Safety**: Custom `SerializableMessage` types with compile-time validation
+- **Backward Compatibility**: All existing context operations continue to work unchanged
+
+### Architecture Improvements
+
+- **Thread-Safe Design**: Concurrent access to both context data and chat history
+- **Memory Management**: Optional message limits for long-running conversations
+- **Performance**: Optimized storage with separate handling for data and messages
+- **Maintainability**: Clear separation of concerns and well-defined interfaces
+
 ## Future Enhancements
 
-- Persistent storage implementations
+- Enhanced message metadata and filtering
+- Dedicated chat history persistence backends
 - WebSocket support for streaming responses
 - Graph visualization tools
 - More built-in task types
 - Distributed execution support
+- Conversation analytics and insights
 
 ## License
 
