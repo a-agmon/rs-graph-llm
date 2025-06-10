@@ -97,15 +97,32 @@ async fn execute_graph(
 ) -> Result<Json<ExecuteResponse>, StatusCode> {
     info!("Execute request: {:?}", request);
 
+    // Check if session_id was provided for validation
+    let session_id_provided = request.session_id.is_some();
+
     // Get or create session id
     let session_id = request
         .session_id
         .unwrap_or_else(|| Uuid::new_v4().to_string());
 
+    // Validate session ID format if provided
+    if session_id_provided {
+        if let Err(_) = Uuid::parse_str(&session_id) {
+            error!("Invalid session ID format: {}", session_id);
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
+
     // Get or create session
     let mut session = match state.session_storage.get(&session_id).await {
         Ok(Some(session)) => session,
         Ok(None) => {
+            // Only create new session if session_id was not provided
+            // If session_id was provided but not found, return error
+            if session_id_provided {
+                error!("Session not found: {}", session_id);
+                return Err(StatusCode::NOT_FOUND);
+            }
             Session::new_from_task(session_id.clone(), type_name::<CollectUserDetailsTask>())
         }
         Err(e) => {
