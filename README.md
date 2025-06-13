@@ -1,4 +1,4 @@
-# RS-Inter-Task: A LangGraph-like Stateful Graph Execution Framework for Rust
+# rs-graph-llm: A LangGraph-like Stateful Graph Execution Framework for Rust
 
 A lean, powerful stateful graph execution framework for building and running interactive agentic workflows with LLM integration, inspired by LangGraph but built from the ground up in Rust.
 
@@ -219,7 +219,7 @@ The [`graph-service`](graph-service/) demonstrates a complete agentic workflow f
 
 ```mermaid
 graph TD
-    A["Initial Claim Query<br/>• Welcome user<br/>• Gather basic info<br/>• LLM conversation"] --> B["🔍 Insurance Type Classifier<br/>• Analyze claim description<br/>• Extract insurance type<br/>"]
+    A["Initial Claim Query<br/>• Welcome user<br/>• Gather basic info<br/>• LLM conversation"] --> B[" Insurance Type Classifier<br/>• Analyze claim description<br/>• Extract insurance type<br/>"]
     
     B --> C{Insurance Type?}
     C -->|"Car"| D["Car Insurance Details<br/>• Accident details<br/>• Cost estimation"]
