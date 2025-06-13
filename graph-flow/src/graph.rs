@@ -121,48 +121,12 @@ impl Graph {
                 
                 // Find the next task and execute it immediately (recursive behavior)
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
-                    // Recursively execute from the next task
-                    let recursive_result =
-                        self.execute(&next_task_id, session.context.clone()).await?;
-
-                    // Update session status message from the final result
-                    session.status_message = recursive_result.status_message.clone();
-
-                    // Update session to the appropriate task
-                    match &recursive_result.next_action {
-                        NextAction::Continue => {
-                            // If the result task wants to continue, find its next task
-                            if let Some(next_task_after_result) =
-                                self.find_next_task(&recursive_result.task_id, &session.context)
-                            {
-                                session.current_task_id = next_task_after_result;
-                            } else {
-                                session.current_task_id = recursive_result.task_id.clone();
-                            }
-                        }
-                        _ => {
-                            // For other actions, use the task that generated the result
-                            session.current_task_id = recursive_result.task_id.clone();
-                        }
-                    }
-
-                    // Return the result from the final executed task
-                    let execution_result = match &recursive_result.next_action {
-                        NextAction::WaitForInput => ExecutionResult {
-                            response: recursive_result.response,
-                            status: ExecutionStatus::WaitingForInput,
-                        },
-                        NextAction::End => ExecutionResult {
-                            response: recursive_result.response,
-                            status: ExecutionStatus::Completed,
-                        },
-                        _ => ExecutionResult {
-                            response: recursive_result.response,
-                            status: ExecutionStatus::WaitingForInput,
-                        },
-                    };
-
-                    Ok(execution_result)
+                    // Instead of using the old execute method that clones context,
+                    // continue executing in session mode to preserve context updates
+                    session.current_task_id = next_task_id;
+                    
+                    // Recursively call execute_session to maintain proper context sharing
+                    return Box::pin(self.execute_session(session)).await;
                 } else {
                     // No next task found, stay at current task
                     session.current_task_id = result.task_id.clone();
@@ -231,6 +195,7 @@ impl Graph {
 
         Ok(result)
     }
+
 
     /// Execute the graph starting from a specific task
     pub async fn execute(&self, task_id: &str, context: Context) -> Result<TaskResult> {

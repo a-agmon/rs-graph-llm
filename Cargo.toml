@@ -17,7 +17,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1.10", features = ["v4", "serde"] }
 dashmap = "6.1"
-rig-core = "0.12.0"
+rig-core = "0.13.0"
 axum = "0.8.4"
 tower = "0.5"
 tower-http = { version = "0.6.6", features = ["trace"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "json", "macros", "uuid"] }

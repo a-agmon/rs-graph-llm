@@ -2,6 +2,7 @@ pub mod context;
 pub mod error;
 pub mod graph;
 pub mod storage;
+pub mod storage_postgres;
 pub mod task;
 
 // Re-export commonly used types
@@ -11,6 +12,7 @@ pub use graph::{ExecutionResult, ExecutionStatus, Graph, GraphBuilder};
 pub use storage::{
     GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session, SessionStorage,
 };
+pub use storage_postgres::PostgresSessionStorage;
 pub use task::{NextAction, Task, TaskResult};
 
 #[cfg(test)]

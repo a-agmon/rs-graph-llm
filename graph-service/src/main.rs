@@ -14,7 +14,7 @@ use axum::{
 };
 use graph_flow::{
     Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session,
-    SessionStorage, Task,
+    SessionStorage, Task, PostgresSessionStorage,
 };
 use serde::{Deserialize, Serialize};
 use std::any::type_name;
@@ -60,9 +60,24 @@ async fn main() {
         error!("OPENROUTER_API_KEY not set");
         std::process::exit(1);
     }
+    
     // Create storage instances
     let graph_storage = Arc::new(InMemoryGraphStorage::new());
-    let session_storage = Arc::new(InMemorySessionStorage::new());
+    
+    // Check for DATABASE_URL and use PostgreSQL if available, otherwise use in-memory
+    let session_storage: Arc<dyn SessionStorage> = if let Ok(database_url) = std::env::var("DATABASE_URL") {
+        info!("Using PostgreSQL session storage");
+        match PostgresSessionStorage::connect(&database_url).await {
+            Ok(postgres_storage) => Arc::new(postgres_storage),
+            Err(e) => {
+                error!("Failed to connect to PostgreSQL: {}. Falling back to in-memory storage.", e);
+                Arc::new(InMemorySessionStorage::new())
+            }
+        }
+    } else {
+        info!("Using in-memory session storage (set DATABASE_URL to use PostgreSQL)");
+        Arc::new(InMemorySessionStorage::new())
+    };
 
     // Create and store a default graph
     let default_graph = create_default_graph();

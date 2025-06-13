@@ -119,7 +119,7 @@ impl SmartClaimValidatorTask {
         } else {
             let status_message = "Waiting for approval decision - please respond with 'approved' to approve".to_string();
             Ok(TaskResult::new_with_status(
-                Some("Please respond with 'approved' to approve this claim.".to_string()),
+                Some("Waiting for approval decision.".to_string()),
                 NextAction::WaitForInput,
                 Some(status_message),
             ))

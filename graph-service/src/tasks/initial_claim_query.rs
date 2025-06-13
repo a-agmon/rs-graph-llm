@@ -55,7 +55,7 @@ impl Task for InitialClaimQueryTask {
         Ok(TaskResult::new_with_status(
             Some(response),
             NextAction::Continue,
-            Some("Initial claim information collected - proceeding to insurance type classification".to_string()),
+            Some("Claim processing started - proceeding to insurance type classification".to_string()),
         ))
     }
 }

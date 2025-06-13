@@ -15,28 +15,28 @@ struct ApartmentDetailsResponse {
     additional_info: Option<String>,
 }
 
-const APARTMENT_INSURANCE_DETAILS_PROMPT: &str = r#"You are an apartment/home insurance claims specialist. Help the user provide complete details about their apartment insurance claim.
+const APARTMENT_INSURANCE_DETAILS_PROMPT: &str = r#"
+You are an apartment insurance claims specialist. Collect claim details efficiently.
 
-You need to collect:
-1. DESCRIPTION: Detailed description of what happened (damage, theft, fire, flood, etc.)
-2. ESTIMATED COST: The estimated cost for repairs or replacement
+Required information:
+1. DESCRIPTION: What happened (damage, theft, fire, flood, etc.)
+2. ESTIMATED COST: Repair/replacement cost
 
-WHEN YOU HAVE COMPLETE INFORMATION, respond with ONLY this JSON:
+CRITICAL: When you have complete information, respond with ONLY this JSON (no explanation, no additional text):
 {
   "description": "detailed description of the incident",
-  "estimated_cost": 2500.00,
+  "estimated_cost": 1500.00,
   "additional_info": "any extra relevant details"
 }
 
-GUIDELINES:
-- Ask specific questions about the property damage/loss
-- Help them estimate repair/replacement costs if they're unsure
-- Be thorough but efficient
-- Ask about: what happened, when, extent of damage, affected items/areas
-- Common apartment claims: water damage, fire, theft, vandalism, storm damage
+If missing information:
+- Ask one specific question at a time
+- Be brief and direct
+- Focus on: what happened, when, where, damage extent, cost estimate
 
-IF MISSING INFO, ask clear questions to get what's needed for the claim.
-Do not mix text and JSON in your response. If you know the type, respond with the JSON format above ONLY.
+NEVER include explanatory text with JSON. Respond with either:
+1. JSON only (when complete)
+2. Brief question only (when missing info)
 "#;
 
 /// Attempts to parse apartment insurance details from LLM response

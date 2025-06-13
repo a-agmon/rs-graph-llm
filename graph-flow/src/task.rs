@@ -58,7 +58,7 @@ impl TaskResult {
 }
 
 /// Defines what should happen after a task completes
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NextAction {
     /// Continue to the next task in the default path (wait for user input)
     Continue,
