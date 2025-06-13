@@ -234,9 +234,9 @@ graph TD
     
     I --> K{Approval Decision?}
     K -->|"'approved'"| L["Manual Approval<br/>• Mark as approved<br/>• Generate decision<br/>"]
-    K -->|"Other response"| 
+    K -->|"Other response"| M["Final Summary<br/>• Generate comprehensive report<br/>• Complete workflow"]
     
-    H --> M["Final Summary<br/>• Generate comprehensive report<br/>• Complete workflow"]
+    H --> M
     L --> M
     
     %% Styling
