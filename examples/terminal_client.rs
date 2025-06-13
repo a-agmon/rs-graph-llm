@@ -37,6 +37,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             body["session_id"] = json!(sid);
         }
 
+        // Display the request being sent
+        println!("\n--- REQUEST ---");
+        println!("URL: {}", url);
+        println!("Body: {}", serde_json::to_string_pretty(&body)?);
+        println!("--- END REQUEST ---\n");
+
         let resp = client
             .post(&url)
             .header("Content-Type", "application/json")
@@ -46,7 +52,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let status = resp.status();
         let text = resp.text().await?;
-        println!("\nStatus: {}\nResponse:\n{}\n", status, text);
+        println!("--- RESPONSE ---");
+        println!("Status: {}", status);
+        println!("Body:\n{}", text);
+        println!("--- END RESPONSE ---\n");
 
         // Try to extract session_id from response if not set
         if session_id.is_none() {
@@ -68,6 +77,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Exiting chat.");
             break;
         }
+        
+        // Check for session info keywords
+        if input.eq_ignore_ascii_case("session")
+            || input.eq_ignore_ascii_case("session_info")
+            || input.eq_ignore_ascii_case("session_data") {
+            match &session_id {
+                Some(sid) => println!("Current session ID: {}", sid),
+                None => println!("No active session (session_id is None)"),
+            }
+            continue;
+        }
+        
         content = input.to_string();
     }
 

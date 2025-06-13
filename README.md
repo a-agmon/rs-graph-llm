@@ -4,14 +4,9 @@ A lean, powerful stateful graph execution framework for building and running int
 
 ## Why This Framework?
 
-Traditional workflow systems often struggle with:
-- **State Management**: Maintaining complex state across multiple interactions
-- **LLM Integration**: Seamlessly incorporating AI agents into workflows
-- **Conditional Logic**: Dynamic routing based on runtime decisions
-- **Session Persistence**: Resuming workflows across different requests/sessions
-- **Type Safety**: Ensuring workflow correctness at compile time
+LangGraph is awesome. It makes it easy to design stateful, graph-based agent workflows with built-in persistence and retries, so you can focus on the logic instead of the infrastructure. But when it comes to heavy production workloads, its Python core can become a bottleneck—performance is limited, and it imposes runtime overhead that can be costly at scale. Additionally, debugging complex async flows is often challenging, and the persistence layer—while flexible—is not always transparent or easy to integrate, with a schema that can be difficult to evolve or query directly.
 
-This framework addresses all these challenges while leveraging Rust's performance and safety guarantees.
+*rs-graph-llm* takes the best ideas from LangGraph and tries to build them in Rust: fast, memory-efficient, and designed for production. You still get a simple graph-based model and resumable execution, but with strong typing, clear and queryable persistence (Postgres), full observability, and the reliability of a single compiled binary that can run anywhere.
 
 ## Architecture Overview
 
@@ -48,7 +43,8 @@ impl Task for HelloTask {
         // Store result for next task
         context.set("greeting", greeting.clone()).await;
 
-        // Control flow: Continue to next task but give control back to workflow manager
+        // Control flow: Continue to next task 
+        // but give control back to workflow manager, to return response to client
         Ok(TaskResult::new(Some(greeting), NextAction::Continue))
     }
 }
@@ -94,6 +90,8 @@ loop {
         .ok_or("Session not found")?;
 
     // Execute one step
+    // Because the step returns: NextAction::Continue it will return after executing one task
+    // If you return NextAction::ContinueAndExecute then it will NOT return and immediatly execute the next one
     let result = graph.execute_session(&mut current_session).await?;
 
     // Save updated state
@@ -221,24 +219,24 @@ The [`graph-service`](graph-service/) demonstrates a complete agentic workflow f
 
 ```mermaid
 graph TD
-    A["🚀 Initial Claim Query<br/>• Welcome user<br/>• Gather basic info<br/>• LLM conversation"] --> B["🔍 Insurance Type Classifier<br/>• Analyze claim description<br/>• Extract insurance type<br/>• Route to specialists"]
+    A["Initial Claim Query<br/>• Welcome user<br/>• Gather basic info<br/>• LLM conversation"] --> B["🔍 Insurance Type Classifier<br/>• Analyze claim description<br/>• Extract insurance type<br/>"]
     
     B --> C{Insurance Type?}
-    C -->|"Car"| D["🚗 Car Insurance Details<br/>• Vehicle information<br/>• Accident details<br/>• Damage assessment<br/>• Cost estimation"]
-    C -->|"Apartment"| E["🏠 Apartment Insurance Details<br/>• Property information<br/>• Damage description<br/>• Loss assessment<br/>• Cost estimation"]
+    C -->|"Car"| D["Car Insurance Details<br/>• Accident details<br/>• Cost estimation"]
+    C -->|"Apartment"| E["Apartment Insurance Details<br/>• Property information<br/>• Cost estimation"]
     
-    D --> F["⚖️ Smart Claim Validator<br/>• Analyze claim amount<br/>• Apply business rules<br/>• Route for approval"]
+    D --> F["Smart Claim Validator<br/>• Apply business rules<br/>• Route for approval"]
     E --> F
     
     F --> G{Claim Amount?}
-    G -->|"< $1000"| H["✅ Auto-Approve<br/>• Instant approval<br/>• Generate decision<br/>• Update context"]
-    G -->|"≥ $1000"| I["⏳ Manual Review Required<br/>• Wait for human input<br/>• Pause workflow<br/>• Request approval"]
+    G -->|"< $1000"| H["Auto-Approve<br/>• Update context"]
+    G -->|"≥ $1000"| I["Manual Review Required<br/>• Wait for human input<br/>• Pause workflow<br/>"]
     
     I --> K{Approval Decision?}
-    K -->|"'approved'"| L["✅ Manual Approval<br/>• Mark as approved<br/>• Generate decision<br/>• Continue workflow"]
-    K -->|"Other response"| I
+    K -->|"'approved'"| L["Manual Approval<br/>• Mark as approved<br/>• Generate decision<br/>"]
+    K -->|"Other response"| 
     
-    H --> M["📋 Final Summary<br/>• Generate comprehensive report<br/>• Include all details<br/>• Provide next steps<br/>• Complete workflow"]
+    H --> M["Final Summary<br/>• Generate comprehensive report<br/>• Complete workflow"]
     L --> M
     
     %% Styling
@@ -256,7 +254,7 @@ graph TD
 ```
 
 **Key Features Illustrated:**
-- **LLM-Driven Interactions**: Each task uses AI for natural language processing
+- **LLM-Driven Interactions**: Each task uses AI for natural language processing / understanding
 - **Conditional Routing**: Dynamic branching based on insurance type and claim amount
 - **Human-in-the-Loop**: Manual approval process for high-value claims
 - **Stateful Waiting**: Workflow pauses and resumes based on user input
