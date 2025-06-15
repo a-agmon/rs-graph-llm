@@ -175,18 +175,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .add_task(positive_task)
             .add_task(negative_task)
             // Conditional routing based on the sentiment detected in the first task
-            .add_conditional_edge(sentiment_id.clone(), positive_id.clone(), |context| {
-                context
-                    .get_sync::<String>("sentiment")
-                    .map(|s| s == "positive")
-                    .unwrap_or(false)
-            })
-            .add_conditional_edge(sentiment_id.clone(), negative_id.clone(), |context| {
-                context
-                    .get_sync::<String>("sentiment")
-                    .map(|s| s == "negative")
-                    .unwrap_or(false)
-            })
+            .add_conditional_edge(
+                sentiment_id.clone(),
+                |context| {
+                    context
+                        .get_sync::<String>("sentiment")
+                        .map(|s| s == "positive")
+                        .unwrap_or(false)
+                },
+                positive_id.clone(),
+                negative_id.clone(),
+            )
             .build(),
     );
 

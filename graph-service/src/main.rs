@@ -2,26 +2,26 @@ mod chat_bridge;
 mod tasks;
 
 use crate::tasks::{
-    InitialClaimQueryTask, InsuranceTypeClassifierTask, CarInsuranceDetailsTask,
-    ApartmentInsuranceDetailsTask, SmartClaimValidatorTask, FinalSummaryTask,
+    ApartmentInsuranceDetailsTask, CarInsuranceDetailsTask, FinalSummaryTask,
+    InitialClaimQueryTask, InsuranceTypeClassifierTask, SmartClaimValidatorTask,
 };
 use axum::{
     Router,
     extract::{Path, State},
-    http::{StatusCode, HeaderValue, Request},
+    http::{HeaderValue, Request, StatusCode},
+    middleware::{Next, from_fn},
     response::Json,
     routing::{get, post},
-    middleware::{from_fn, Next},
 };
 use graph_flow::{
-    Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session,
-    SessionStorage, Task, PostgresSessionStorage,
+    Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage,
+    PostgresSessionStorage, Session, SessionStorage, Task,
 };
 use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::sync::Arc;
 use tasks::session_keys;
-use tracing::{error, info, Instrument};
+use tracing::{Instrument, error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
@@ -62,7 +62,12 @@ fn init_tracing() {
             // Structured JSON logging for production
             tracing_subscriber::registry()
                 .with(env_filter)
-                .with(tracing_subscriber::fmt::layer().json().with_target(true).with_level(true))
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_target(true)
+                        .with_level(true),
+                )
                 .init();
         }
     }
@@ -75,7 +80,7 @@ async fn correlation_id_middleware(
 ) -> axum::response::Response {
     // Generate a correlation ID for this request
     let correlation_id = Uuid::new_v4().to_string();
-    
+
     // Add correlation ID to request headers for downstream use
     request.headers_mut().insert(
         "x-correlation-id",
@@ -84,7 +89,7 @@ async fn correlation_id_middleware(
 
     // Create a tracing span for this request with correlation ID
     let span = tracing::info_span!("http_request", correlation_id = %correlation_id);
-    
+
     // Execute the request within the span
     next.run(request).instrument(span).await
 }
@@ -100,24 +105,28 @@ async fn main() {
         error!("OPENROUTER_API_KEY not set");
         std::process::exit(1);
     }
-    
+
     // Create storage instances
     let graph_storage = Arc::new(InMemoryGraphStorage::new());
-    
+
     // Check for DATABASE_URL and use PostgreSQL if available, otherwise use in-memory
-    let session_storage: Arc<dyn SessionStorage> = if let Ok(database_url) = std::env::var("DATABASE_URL") {
-        info!("Using PostgreSQL session storage");
-        match PostgresSessionStorage::connect(&database_url).await {
-            Ok(postgres_storage) => Arc::new(postgres_storage),
-            Err(e) => {
-                error!("Failed to connect to PostgreSQL: {}. Falling back to in-memory storage.", e);
-                Arc::new(InMemorySessionStorage::new())
+    let session_storage: Arc<dyn SessionStorage> =
+        if let Ok(database_url) = std::env::var("DATABASE_URL") {
+            info!("Using PostgreSQL session storage");
+            match PostgresSessionStorage::connect(&database_url).await {
+                Ok(postgres_storage) => Arc::new(postgres_storage),
+                Err(e) => {
+                    error!(
+                        "Failed to connect to PostgreSQL: {}. Falling back to in-memory storage.",
+                        e
+                    );
+                    Arc::new(InMemorySessionStorage::new())
+                }
             }
-        }
-    } else {
-        info!("Using in-memory session storage (set DATABASE_URL to use PostgreSQL)");
-        Arc::new(InMemorySessionStorage::new())
-    };
+        } else {
+            info!("Using in-memory session storage (set DATABASE_URL to use PostgreSQL)");
+            Arc::new(InMemorySessionStorage::new())
+        };
 
     // Create and store a default graph
     let default_graph = create_default_graph();
@@ -221,11 +230,8 @@ async fn execute_graph(
         .context
         .set(session_keys::USER_INPUT, request.content)
         .await;
-    
-    session
-        .context
-        .set("session_id", session_id.clone())
-        .await;
+
+    session.context.set("session_id", session_id.clone()).await;
 
     // Get or create the relevant graph type id
     let graph = get_or_create_graph(state.graph_storage.clone()).await?;
@@ -317,7 +323,7 @@ fn create_default_graph() -> Graph {
     use crate::tasks::session_keys;
 
     let mut builder = GraphBuilder::new("simplified_insurance_claims");
-    
+
     // Create simplified task instances
     let initial_claim_query = Arc::new(InitialClaimQueryTask);
     let insurance_type_classifier = Arc::new(InsuranceTypeClassifierTask);
@@ -349,22 +355,14 @@ fn create_default_graph() -> Graph {
     // Conditional routing from classifier to specific details collectors
     builder = builder.add_conditional_edge(
         classifier_id.clone(),
-        car_details_id.clone(),
         |context| {
-            context.get_sync::<String>(session_keys::INSURANCE_TYPE)
+            context
+                .get_sync::<String>(session_keys::INSURANCE_TYPE)
                 .map(|t| t == "car")
                 .unwrap_or(false)
-        }
-    );
-
-    builder = builder.add_conditional_edge(
-        classifier_id,
-        apartment_details_id.clone(),
-        |context| {
-            context.get_sync::<String>(session_keys::INSURANCE_TYPE)
-                .map(|t| t == "apartment")
-                .unwrap_or(false)
-        }
+        },
+        car_details_id.clone(),       // yes – car branch
+        apartment_details_id.clone(), // else – apartment branch
     );
 
     // Both details collectors flow to smart validator
