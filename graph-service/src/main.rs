@@ -8,9 +8,10 @@ use crate::tasks::{
 use axum::{
     Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, HeaderValue, Request},
     response::Json,
     routing::{get, post},
+    middleware::{from_fn, Next},
 };
 use graph_flow::{
     Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session,
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::sync::Arc;
 use tasks::session_keys;
-use tracing::{error, info};
+use tracing::{error, info, Instrument};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
@@ -43,16 +44,55 @@ struct ExecuteResponse {
     status: String,
 }
 
+/// Initialize structured JSON tracing based on environment variables
+fn init_tracing() {
+    let log_format = std::env::var("LOG_FORMAT").unwrap_or_else(|_| "json".to_string());
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| "graph_service=debug,graph_flow=debug,tower_http=debug".into());
+
+    match log_format.as_str() {
+        "pretty" => {
+            // Human-readable logging for development
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(tracing_subscriber::fmt::layer().pretty())
+                .init();
+        }
+        _ => {
+            // Structured JSON logging for production
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(tracing_subscriber::fmt::layer().json().with_target(true).with_level(true))
+                .init();
+        }
+    }
+}
+
+/// Middleware to add correlation ID to all requests
+async fn correlation_id_middleware(
+    mut request: Request<axum::body::Body>,
+    next: Next,
+) -> axum::response::Response {
+    // Generate a correlation ID for this request
+    let correlation_id = Uuid::new_v4().to_string();
+    
+    // Add correlation ID to request headers for downstream use
+    request.headers_mut().insert(
+        "x-correlation-id",
+        HeaderValue::from_str(&correlation_id).unwrap(),
+    );
+
+    // Create a tracing span for this request with correlation ID
+    let span = tracing::info_span!("http_request", correlation_id = %correlation_id);
+    
+    // Execute the request within the span
+    next.run(request).instrument(span).await
+}
+
 #[tokio::main]
 async fn main() {
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "graph_service=debug,graph_flow=debug,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Initialize structured JSON tracing
+    init_tracing();
 
     // Check if API key is available
     // This is required for LLM-based tasks (CollectUserDetailsTask, AnswerUserRequestsTask)
@@ -91,12 +131,12 @@ async fn main() {
         session_storage,
     };
 
-    // Build the router
+    // Build the router with correlation ID middleware
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/execute", post(execute_graph))
         .route("/session/{id}", get(get_session))
-        // .layer(TraceLayer::new_for_http())
+        .layer(from_fn(correlation_id_middleware))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -114,7 +154,17 @@ async fn execute_graph(
     State(state): State<AppState>,
     Json(request): Json<ExecuteRequest>,
 ) -> Result<Json<ExecuteResponse>, StatusCode> {
-    info!("Execute request: {:?}", request);
+    let correlation_id = tracing::Span::current()
+        .field("correlation_id")
+        .map(|f| f.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    info!(
+        correlation_id = %correlation_id,
+        session_id = ?request.session_id,
+        content_length = %request.content.len(),
+        "Processing execute request"
+    );
 
     // Check if session_id was provided for validation
     let session_id_provided = request.session_id.is_some();
@@ -126,7 +176,11 @@ async fn execute_graph(
 
     // Validate session ID format if provided
     if session_id_provided && Uuid::parse_str(&session_id).is_err() {
-        error!("Invalid session ID format: {}", session_id);
+        error!(
+            correlation_id = %correlation_id,
+            session_id = %session_id,
+            "Invalid session ID format"
+        );
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -137,21 +191,40 @@ async fn execute_graph(
             // Only create new session if session_id was not provided
             // If session_id was provided but not found, return error
             if session_id_provided {
-                error!("Session not found: {}", session_id);
+                error!(
+                    correlation_id = %correlation_id,
+                    session_id = %session_id,
+                    "Session not found"
+                );
                 return Err(StatusCode::NOT_FOUND);
             }
+            info!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                "Creating new session"
+            );
             Session::new_from_task(session_id.clone(), type_name::<InitialClaimQueryTask>())
         }
         Err(e) => {
-            error!("Failed to get session: {}", e);
+            error!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                error = %e,
+                "Failed to get session"
+            );
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
-    // set the current user input in the session
+    // set the current user input and session ID in the session context
     session
         .context
         .set(session_keys::USER_INPUT, request.content)
+        .await;
+    
+    session
+        .context
+        .set("session_id", session_id.clone())
         .await;
 
     // Get or create the relevant graph type id
@@ -161,16 +234,33 @@ async fn execute_graph(
     let result = match graph.execute_session(&mut session).await {
         Ok(result) => result,
         Err(e) => {
-            error!("Failed to execute graph: {}", e);
+            error!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                error = %e,
+                "Failed to execute graph"
+            );
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
 
     // persist the session
     if let Err(e) = state.session_storage.save(session).await {
-        error!("Failed to save session: {}", e);
+        error!(
+            correlation_id = %correlation_id,
+            session_id = %session_id,
+            error = %e,
+            "Failed to save session"
+        );
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
+
+    info!(
+        correlation_id = %correlation_id,
+        session_id = %session_id,
+        status = ?result.status,
+        "Request completed successfully"
+    );
 
     Ok(Json(ExecuteResponse {
         session_id,
@@ -183,11 +273,41 @@ async fn get_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<Json<Session>, StatusCode> {
+    let correlation_id = tracing::Span::current()
+        .field("correlation_id")
+        .map(|f| f.to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    info!(
+        correlation_id = %correlation_id,
+        session_id = %session_id,
+        "Getting session"
+    );
+
     match state.session_storage.get(&session_id).await {
-        Ok(Some(session)) => Ok(Json(session)),
-        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Ok(Some(session)) => {
+            info!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                "Session found"
+            );
+            Ok(Json(session))
+        }
+        Ok(None) => {
+            info!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                "Session not found"
+            );
+            Err(StatusCode::NOT_FOUND)
+        }
         Err(e) => {
-            error!("Failed to get session: {}", e);
+            error!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                error = %e,
+                "Failed to get session"
+            );
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
