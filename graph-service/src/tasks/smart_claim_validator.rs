@@ -16,7 +16,13 @@ impl Task for SmartClaimValidatorTask {
     }
 
     async fn run(&self, context: Context) -> Result<TaskResult> {
-        info!("running task: {}", self.id());
+        let session_id = context.get::<String>("session_id").await.unwrap_or_else(|| "unknown".to_string());
+        
+        info!(
+            session_id = %session_id,
+            task_id = %self.id(),
+            "Starting claim validation task"
+        );
 
         // Check if we're waiting for approval
         let approval_state: Option<String> = context
@@ -30,6 +36,12 @@ impl Task for SmartClaimValidatorTask {
                 .await
                 .ok_or_else(|| GraphError::ContextError("user_input not found".to_string()))?;
             
+            info!(
+                session_id = %session_id,
+                task_id = %self.id(),
+                "Processing approval decision from user"
+            );
+            
             return self.handle_approval_decision(context, user_input).await;
         }
 
@@ -41,7 +53,13 @@ impl Task for SmartClaimValidatorTask {
 
         let claim_amount = claim_details.estimated_cost.unwrap_or(0.0);
         
-        info!("Processing claim with amount: ${:.2}", claim_amount);
+        info!(
+            session_id = %session_id,
+            task_id = %self.id(),
+            claim_amount = %claim_amount,
+            threshold = 1000.0,
+            "Processing claim validation"
+        );
 
         if claim_amount < 1000.0 {
             // Auto-approve for amounts under $1000
@@ -58,7 +76,14 @@ impl Task for SmartClaimValidatorTask {
                 claim_amount
             );
 
-            info!("{}", status_message);
+            info!(
+                session_id = %session_id,
+                task_id = %self.id(),
+                claim_amount = %claim_amount,
+                decision = "auto_approved",
+                reason = "under_threshold",
+                "Claim automatically approved"
+            );
 
             Ok(TaskResult::new_with_status(
                 Some(String::from("Your claim has been auto-approved. Do you want to proceed to the final summary?")),
@@ -82,7 +107,14 @@ impl Task for SmartClaimValidatorTask {
                 claim_amount
             );
 
-            info!("{}", status_message);
+            info!(
+                session_id = %session_id,
+                task_id = %self.id(),
+                claim_amount = %claim_amount,
+                decision = "manual_review_required",
+                reason = "over_threshold",
+                "Claim requires manual approval"
+            );
 
             Ok(TaskResult::new_with_status(
                 Some(approval_request),

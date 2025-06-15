@@ -6,6 +6,10 @@ path = "simple_example.rs"
 name = "terminal_client"
 path = "terminal_client.rs"
 
+[[bin]]
+name = "complex_example"
+path = "complex_example.rs"
+
 [package]
 name = "examples"
 version = "0.1.0"
@@ -17,4 +21,9 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 reqwest = { version = "0.12", features = ["json"] }
 clap = { version = "4.5", features = ["derive"] }
-serde_json = "1.0" 
+serde_json = "1.0"
+rig-core = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true } 

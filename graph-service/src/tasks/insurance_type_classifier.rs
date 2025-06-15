@@ -54,7 +54,13 @@ impl Task for InsuranceTypeClassifierTask {
     }
 
     async fn run(&self, context: Context) -> Result<TaskResult> {
-        info!("running task: {}", self.id());
+        let session_id = context.get::<String>("session_id").await.unwrap_or_else(|| "unknown".to_string());
+        
+        info!(
+            session_id = %session_id,
+            task_id = %self.id(),
+            "Starting insurance type classification"
+        );
 
         let user_input: String = context
             .get(session_keys::USER_INPUT)
@@ -94,7 +100,13 @@ impl Task for InsuranceTypeClassifierTask {
                 .await;
 
             let status_message = format!("Insurance type classified as: {} - proceeding to collect specific details", insurance_type);
-            info!("{}", status_message);
+            
+            info!(
+                task_id = %self.id(),
+                insurance_type = %insurance_type,
+                next_step = "collect_details",
+                "Classification complete, proceeding to details collection"
+            );
             
             return Ok(TaskResult::new_with_status(
                 None, 

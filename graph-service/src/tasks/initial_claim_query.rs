@@ -28,14 +28,25 @@ impl Task for InitialClaimQueryTask {
     }
 
     async fn run(&self, context: Context) -> Result<TaskResult> {
-        info!("running task: {}", self.id());
+        let session_id = context.get::<String>("session_id").await.unwrap_or_else(|| "unknown".to_string());
+        
+        info!(
+            session_id = %session_id,
+            task_id = %self.id(),
+            "Starting task execution"
+        );
         
         let user_input: String = context
             .get(session_keys::USER_INPUT)
             .await
             .ok_or_else(|| GraphError::ContextError("user_input not found".to_string()))?;
 
-        info!("Processing initial claim query: {}", user_input);
+        info!(
+            session_id = %session_id,
+            task_id = %self.id(),
+            input_length = %user_input.len(),
+            "Processing initial claim query"
+        );
 
         // Use LLM to welcome the user and gather initial information
         let response = process_initial_claim(&user_input)
