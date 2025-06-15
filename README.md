@@ -123,25 +123,16 @@ let graph = GraphBuilder::new("conditional_workflow")
     .add_task(classifier_task)
     .add_task(car_task)
     .add_task(apartment_task)
-    // Route to car_task if insurance_type == "car"
+    // Route based on insurance_type: "car" -> car_task, else -> apartment_task
     .add_conditional_edge(
-        "classifier", 
-        "car_task",
+        "classifier",
         |context| {
             context.get_sync::<String>("insurance_type")
                 .map(|t| t == "car")
                 .unwrap_or(false)
-        }
-    )
-    // Route to apartment_task if insurance_type == "apartment"
-    .add_conditional_edge(
-        "classifier",
-        "apartment_task", 
-        |context| {
-            context.get_sync::<String>("insurance_type")
-                .map(|t| t == "apartment")
-                .unwrap_or(false)
-        }
+        },
+        "car_task",        // yes branch
+        "apartment_task",  // else branch
     )
     .build();
 ```
@@ -320,12 +311,13 @@ Dynamic graph traversal based on runtime state:
 // Route based on insurance type determined by LLM
 .add_conditional_edge(
     classifier_id,
-    car_details_id,
     |context| {
         context.get_sync::<String>(session_keys::INSURANCE_TYPE)
             .map(|t| t == "car")
             .unwrap_or(false)
-    }
+    },
+    car_details_id,
+    apartment_details_id,
 )
 ```
 
@@ -429,6 +421,25 @@ pub enum NextAction {
 }
 ```
 
+#### Step-by-Step vs `ContinueAndExecute`
+
+The **default execution model** is *step-wise*. After each task finishes the engine:
+
+1. Stores any updates the task made to the `Context` / session.
+2. Decides what the next task *would* be.
+3. Returns control back to the caller **without** running that next task – you remain in charge of when to resume.
+
+That behaviour is triggered by returning `NextAction::Continue` (or `WaitForInput`, `End`, etc.).
+
+If you prefer a *fire-and-forget* flow for a particular step you can return `NextAction::ContinueAndExecute` instead. In that case the graph **immediately** calls the next task within the same request cycle, propagating the same `Context` – useful for fully automated branches where no external input is needed.
+
+Put differently:
+
+• **Continue** ⇒ *advance one edge, then stop* (the service responds after every hop).  
+• **ContinueAndExecute** ⇒ *advance and keep running* until a task chooses a different action.
+
+This fine-grained control lets you blend synchronous chains (multiple tasks auto-executed) with interactive pauses (waiting for user input) in the same workflow.
+
 ### Context and State Management
 
 The [`Context`](graph-flow/src/context.rs) provides thread-safe state management:
@@ -468,8 +479,9 @@ let graph = GraphBuilder::new("workflow_name")
     .add_edge("task1", "task2") // Linear connections
     .add_conditional_edge(      // Conditional routing
         "task2", 
-        "task3", 
-        |ctx| condition_check(ctx)
+        |ctx| condition_check(ctx),
+        "task3_yes",   // yes branch
+        "task3_no",    // else branch
     )
     .build();
 ```

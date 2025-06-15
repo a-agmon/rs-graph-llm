@@ -70,21 +70,40 @@ impl Graph {
         self
     }
 
-    /// Add a conditional edge between tasks
+    /// Add a conditional edge with an explicit `else` branch.
+    /// `yes` is taken when `condition(ctx)` returns `true`; otherwise `no` is chosen.
     pub fn add_conditional_edge<F>(
         &self,
         from: impl Into<String>,
-        to: impl Into<String>,
         condition: F,
+        yes: impl Into<String>,
+        no: impl Into<String>,
     ) -> &Self
     where
         F: Fn(&Context) -> bool + Send + Sync + 'static,
     {
-        self.edges.lock().unwrap().push(Edge {
-            from: from.into(),
-            to: to.into(),
-            condition: Some(Arc::new(condition)),
+        let from = from.into();
+        let yes_to = yes.into();
+        let no_to = no.into();
+
+        let predicate: EdgeCondition = Arc::new(condition);
+
+        let mut edges = self.edges.lock().unwrap();
+
+        // "yes" branch
+        edges.push(Edge {
+            from: from.clone(),
+            to: yes_to,
+            condition: Some(predicate),
         });
+
+        // "else" branch (unconditional fallback)
+        edges.push(Edge {
+            from,
+            to: no_to,
+            condition: None,
+        });
+
         self
     }
 
@@ -101,7 +120,7 @@ impl Graph {
             NextAction::Continue => {
                 // Update session status message if provided
                 session.status_message = result.status_message.clone();
-                
+
                 // Find the next task but don't execute it
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
                     session.current_task_id = next_task_id;
@@ -118,13 +137,13 @@ impl Graph {
             NextAction::ContinueAndExecute => {
                 // Update session status message if provided
                 session.status_message = result.status_message.clone();
-                
+
                 // Find the next task and execute it immediately (recursive behavior)
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
                     // Instead of using the old execute method that clones context,
                     // continue executing in session mode to preserve context updates
                     session.current_task_id = next_task_id;
-                    
+
                     // Recursively call execute_session to maintain proper context sharing
                     return Box::pin(self.execute_session(session)).await;
                 } else {
@@ -196,7 +215,6 @@ impl Graph {
         Ok(result)
     }
 
-
     /// Execute the graph starting from a specific task
     pub async fn execute(&self, task_id: &str, context: Context) -> Result<TaskResult> {
         let task = self
@@ -240,20 +258,15 @@ impl Graph {
     pub fn find_next_task(&self, current_task_id: &str, context: &Context) -> Option<String> {
         let edges = self.edges.lock().unwrap();
 
-        // First, check conditional edges
-        for edge in edges.iter() {
-            if edge.from == current_task_id {
-                if let Some(condition) = &edge.condition {
-                    if condition(context) {
-                        return Some(edge.to.clone());
-                    }
-                } else {
-                    // Default edge without condition
-                    return Some(edge.to.clone());
-                }
+        let mut fallback: Option<String> = None;
+        for edge in edges.iter().filter(|e| e.from == current_task_id) {
+            match &edge.condition {
+                Some(pred) if pred(context) => return Some(edge.to.clone()),
+                None if fallback.is_none() => fallback = Some(edge.to.clone()),
+                _ => {}
             }
         }
-        None
+        fallback
     }
 
     /// Get the start task ID
@@ -292,13 +305,14 @@ impl GraphBuilder {
     pub fn add_conditional_edge<F>(
         self,
         from: impl Into<String>,
-        to: impl Into<String>,
         condition: F,
+        yes: impl Into<String>,
+        no: impl Into<String>,
     ) -> Self
     where
         F: Fn(&Context) -> bool + Send + Sync + 'static,
     {
-        self.graph.add_conditional_edge(from, to, condition);
+        self.graph.add_conditional_edge(from, condition, yes, no);
         self
     }
 
