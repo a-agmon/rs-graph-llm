@@ -1,6 +1,6 @@
-# rs-graph-llm | A Rust-built, stateful graph runner for LLM agents
+# rs-graph-llm | A stateful graph execution frameowrk for LLM agents built in native Rust
 
-Inspired by LangGraph and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), rs-graph-llm is a simple, lean, Rust-native framework for designing and running stateful, graph-driven LLM agent workflows. 
+Inspired by LangGraph and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), **rs-graph-llm** is a simple, lean, Rust-native framework for designing and running stateful, graph-driven LLM agent workflows. 
 
 ## Why This Framework?
 
@@ -105,12 +105,6 @@ loop {
     }
 }
 ```
-
-**Key Benefits of This Approach:**
-- **Resumable**: Sessions can be saved and resumed later
-- **Stateful**: Context persists across task executions
-- **Controllable**: Execute one step at a time or run continuously
-- **Persistent**: Session state survives service restarts (with proper storage)
 
 ## Advanced Features
 
@@ -367,13 +361,11 @@ if estimated_cost >= 1000.0 {
 #### 5. **Session State Management**
 Complex state persists across multiple interactions:
 
-```rust
-// State includes:
-// - Chat history (full conversation)
-// - Structured data (claim details, validations)
-// - Workflow position (current task)
-// - Status messages (audit trail)
-```
+ - Chat history (full conversation)
+ - Structured data (claim details, validations)
+ - Workflow position (current task)
+ - Status messages (audit trail)
+
 
 ### Running the Insurance Claims Service
 
@@ -522,33 +514,7 @@ let graph = GraphBuilder::new("workflow_name")
 - **Development**: [`InMemorySessionStorage`](graph-flow/src/storage.rs) - Fast, non-persistent
 - **Production**: [`PostgresSessionStorage`](graph-flow/src/storage_postgres.rs) - Persistent, scalable
 
-### Scaling Patterns
 
-- **Horizontal**: Multiple service instances share PostgreSQL storage
-- **Vertical**: Single instance handles multiple concurrent sessions
-- **Hybrid**: Load balancer + multiple instances + shared storage
-
-### Error Handling
-
-The framework provides comprehensive error handling:
-
-```rust
-// Tasks can return errors that pause workflows
-Err(graph_flow::Error::TaskError("Invalid input".to_string()))
-
-// Errors are captured in session state and can be recovered
-match result.status {
-    ExecutionStatus::Error(err) => {
-        // Handle error, potentially retry or redirect
-    }
-}
-```
-
-### Monitoring and Observability
-
-- **Structured Logging**: Built-in tracing support
-- **Session Tracking**: Full audit trail of workflow execution
-- **Status Messages**: Detailed status information at each step
 
 ## Comparison with LangGraph
 
@@ -563,39 +529,22 @@ match result.status {
 | **LLM Integration** | LangChain ecosystem | Rig crate |
 | **Persistence** | External required | Built-in abstractions |
 
-## Future Enhancements
-
-- **WebSocket Support**: Real-time streaming responses
-- **Graph Visualization**: Visual workflow design and monitoring  
-- **Distributed Execution**: Multi-node workflow execution
-- **Advanced Routing**: ML-based conditional logic
-- **Workflow Analytics**: Performance and usage insights
-- **Template Library**: Pre-built workflow patterns
 
 ## Getting Started
 
-1. **Clone and explore**:
-   ```bash
-   git clone <repo-url>
-   cd rs-inter-task
-   ```
+1. **Quick Start**:
+    - clone the repo 
+    - add the LLM key and database key to the env
+    - Simply re-write the solution with your own task flow, while only chnaging the tasks files  and graph structure in main.rs.
+    - you have a agent orchestration flow wrapper in an Axum service. 
 
-2. **Run the simple example**:
-   ```bash
-   cargo run --example simple_example
+2. **Start on my own**:
+   - import the graph execution crate 
+   ```toml
+   graph-flow = { git = "https://github.com/your-org/rs-inter-task.git", package = "graph-flow", rev = "main" }
    ```
-
-3. **Try the insurance service**:
-   ```bash
-   export OPENROUTER_API_KEY="your-key"
-   cargo run --bin graph-service
-   ```
-
-4. **Build your own workflow**:
-   - Define tasks implementing the `Task` trait
-   - Use `GraphBuilder` to connect them
-   - Add LLM integration with Rig agents
-   - Deploy with session persistence
+   - import rig 
+   - write your tasks and flow
 
 ## License
 
