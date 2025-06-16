@@ -1,6 +1,6 @@
-# rs-graph-llm: A LangGraph-like Stateful Graph Execution Framework for Rust
+# rs-graph-llm | A Rust-built, stateful graph runner for LLM agents
 
-A lean, powerful stateful graph execution framework for building and running interactive agentic workflows with LLM integration, inspired by LangGraph but built from the ground up in Rust.
+Inspired by LangGraph and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), rs-graph-llm is a simple, lean, Rust-native framework for designing and running stateful, graph-driven LLM agent workflows. 
 
 ## Why This Framework?
 
@@ -116,25 +116,54 @@ loop {
 
 ### Conditional Edges
 
-Create dynamic workflows that branch based on runtime decisions:
+The [`complex_example.rs`](examples/complex_example.rs) demo shows how you can branch **at runtime** based on data stored in the `Context`.  It classifies the user's input as _positive_ or _negative_ and then follows the matching branch.
+
+#### SentimentAnalysisTask (minimal)
 
 ```rust
-let graph = GraphBuilder::new("conditional_workflow")
-    .add_task(classifier_task)
-    .add_task(car_task)
-    .add_task(apartment_task)
-    // Route based on insurance_type: "car" -> car_task, else -> apartment_task
+struct SentimentAnalysisTask;
+
+#[async_trait]
+impl Task for SentimentAnalysisTask {
+    fn id(&self) -> &str { std::any::type_name::<Self>() }
+
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        // Very naive heuristic so the example works without an LLM
+        let input: String = ctx.get_sync("user_input").unwrap_or_default();
+        let sentiment = if input.to_lowercase().contains("good") {
+            "positive"
+        } else {
+            "negative"
+        };
+        ctx.set("sentiment", sentiment.to_string()).await;
+        Ok(TaskResult::new(None, NextAction::Continue))
+    }
+}
+```
+
+#### Building the graph
+
+```rust
+let graph = GraphBuilder::new("sentiment_flow")
+    .add_task(sentiment_task)          // Detect sentiment
+    .add_task(positive_task)           // Reply for happy mood
+    .add_task(negative_task)           // Reply for unhappy mood
     .add_conditional_edge(
-        "classifier",
-        |context| {
-            context.get_sync::<String>("insurance_type")
-                .map(|t| t == "car")
-                .unwrap_or(false)
-        },
-        "car_task",        // yes branch
-        "apartment_task",  // else branch
+        sentiment_task.id(),
+        |ctx| ctx.get_sync::<String>("sentiment")
+                 .map(|s| s == "positive")
+                 .unwrap_or(false),
+        positive_task.id(),            // yes branch → positive
+        negative_task.id(),            // else      → negative
     )
     .build();
+```
+
+```mermaid
+graph TD
+    SA["SentimentAnalysisTask"] --> S{Sentiment?}
+    S -->|"positive"| P["PositiveResponseTask"]
+    S -->|"negative"| N["NegativeResponseTask"]
 ```
 
 ### LLM Integration with Rig
