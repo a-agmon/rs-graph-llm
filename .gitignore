@@ -19,3 +19,6 @@ Thumbs.db
 
 # Logs
 *.log 
+
+# ML Models and Caches
+.fastembed_cache/ 
