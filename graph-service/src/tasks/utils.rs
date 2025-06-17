@@ -1,4 +1,8 @@
-use rig::{agent::Agent, client::CompletionClient, providers::openrouter};
+use rig::{
+    agent::Agent,
+    client::{AsEmbeddings, CompletionClient},
+    providers::openrouter,
+};
 
 pub fn get_llm_agent(prompt: &str) -> anyhow::Result<Agent<openrouter::CompletionModel>> {
     let api_key = std::env::var("OPENROUTER_API_KEY")
@@ -7,4 +11,3 @@ pub fn get_llm_agent(prompt: &str) -> anyhow::Result<Agent<openrouter::Completio
     let agent = client.agent("openai/gpt-4o-mini").preamble(prompt).build();
     Ok(agent)
 }
-

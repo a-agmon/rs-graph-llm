@@ -10,6 +10,10 @@ path = "terminal_client.rs"
 name = "complex_example"
 path = "complex_example.rs"
 
+[[bin]]
+name = "recommendation_flow"
+path = "recommendation_flow.rs"
+
 [package]
 name = "examples"
 version = "0.1.0"
@@ -26,4 +30,7 @@ rig-core = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-serde = { workspace = true } 
+serde = { workspace = true }
+rand = "0.9.1"
+sqlx = { workspace = true }
+fastembed = "4" 
