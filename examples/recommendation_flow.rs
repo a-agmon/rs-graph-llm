@@ -2,16 +2,51 @@ use async_trait::async_trait;
 use graph_flow::GraphError::TaskExecutionFailed;
 use graph_flow::{
     Context, ExecutionStatus, GraphBuilder, GraphStorage, InMemoryGraphStorage,
-    InMemorySessionStorage, NextAction, Session, SessionStorage, Task, TaskResult,
+    InMemorySessionStorage, MessageRole, NextAction, PostgresSessionStorage, SerializableMessage,
+    Session, SessionStorage, Task, TaskResult,
 };
-use rig::completion::Chat;
+use rig::completion::{Chat, Message};
 use rig::prelude::*;
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
 use tracing::{Level, error, info, warn};
+use uuid::Uuid;
+
+// Import the extension trait for cleaner chat history access
+trait ContextRigExt {
+    async fn get_rig_messages(&self) -> Vec<Message>;
+}
+
+impl ContextRigExt for Context {
+    async fn get_rig_messages(&self) -> Vec<Message> {
+        let messages = self.get_all_messages().await;
+        to_rig_messages(&messages)
+    }
+}
+
 // Maximum number of retries for answer generation
 const MAX_RETRIES: u32 = 3;
+
+// -----------------------------------------------------------------------------
+// Conversion utilities for SerializableMessage to rig::completion::Message
+// -----------------------------------------------------------------------------
+
+/// Convert a SerializableMessage to a rig::completion::Message
+fn to_rig_message(msg: &SerializableMessage) -> Message {
+    match msg.role {
+        MessageRole::User => Message::user(msg.content.clone()),
+        MessageRole::Assistant => Message::assistant(msg.content.clone()),
+        // rig doesn't have a system message type, so we'll treat it as a user message
+        // with a system prefix
+        MessageRole::System => Message::user(format!("[SYSTEM] {}", msg.content)),
+    }
+}
+
+/// Convert a vector of SerializableMessage to rig::completion::Message vector
+fn to_rig_messages(messages: &[SerializableMessage]) -> Vec<Message> {
+    messages.iter().map(to_rig_message).collect()
+}
 
 // -----------------------------------------------------------------------------
 // A wrapper around `rig` so the example compiles only when OPENROUTER_API_KEY is set
@@ -146,7 +181,7 @@ impl Task for VectorSearchTask {
             "SELECT id, title, overview                                   \
              FROM movies_with_vectors                                      \
              ORDER BY vector <-> ARRAY[{}]::vector                        \
-             LIMIT 10",
+             LIMIT 25",
             vector_literal
         );
 
@@ -209,53 +244,46 @@ impl Task for AnswerGenerationTask {
         );
 
         // Get the full chat history for conversational memory
-        let chat_history = context.get_chat_history().await;
+        let history = context.get_rig_messages().await;
 
-        let mut prompt = format!(
-            r#"
+        let agent = get_llm_agent()
+            .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
+
+        let prompt = if history.is_empty() {
+            format!(
+                r#"
             You are a movie recommendation assistant.
             Use the following information to answer the user request for a movie recommendation.
             If the information is not sufficient, answer as best you can.
             Information:
             {ctx}
             Question: {user_query}"#
-        );
+            )
 
-        // If we have previous attempts in chat history, include the full conversation
-        if !chat_history.is_empty() {
-            info!(
-                "Including {} previous messages from chat history",
-                chat_history.len()
-            );
-
-            let conversation_context = chat_history
-                .messages()
-                .iter()
-                .map(|msg| match msg.role {
-                    graph_flow::MessageRole::User => format!("User: {}", msg.content),
-                    graph_flow::MessageRole::Assistant => format!("Assistant: {}", msg.content),
-                    graph_flow::MessageRole::System => format!("System: {}", msg.content),
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            prompt = format!(
-                "{}\n\nPrevious conversation history:\n{}\n\nIMPORTANT: Please provide an improved recommendation based on all the feedback above. Learn from previous attempts and validation comments.",
-                prompt, conversation_context
-            );
-        }
-
-        let agent = get_llm_agent()
-            .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
+        // if we are running a retry attempt, we only use the context
+        } else {
+            info!(retry_count = %retry_count, "running a retry attempt");
+            format!(
+                r#"
+            You are a movie recommendation assistant.
+            The user asked: "{user_query}"
+            
+            Based on the validation feedback in our conversation above, and the context above, provide an improved movie recommendation.
+            Focus on the specific issues mentioned in the feedback.
+            Provide a complete recommendation without referring to previous attempts.
+            "#
+            )
+        };
 
         let answer = agent
-            .chat(&prompt, vec![])
+            .chat(&prompt, history)
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
         info!("Answer generated: {}", answer);
 
         // Add the current answer attempt to chat history
+        context.add_user_message(prompt).await;
         context
             .add_assistant_message(format!("Attempt {}: {}", retry_count + 1, answer))
             .await;
@@ -326,8 +354,17 @@ impl Task for ValidationTask {
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
+        // Clean JSON response (remove code blocks if present)
+        let cleaned_raw = raw
+            .trim()
+            .strip_prefix("```json")
+            .unwrap_or(&raw)
+            .strip_suffix("```")
+            .unwrap_or(&raw)
+            .trim();
+
         let validation_result =
-            serde_json::from_str::<ValidationResult>(raw.trim()).map_err(|e| {
+            serde_json::from_str::<ValidationResult>(cleaned_raw).map_err(|e| {
                 TaskExecutionFailed(format!(
                     "Could not parse validator response: {}. Raw response: {}",
                     e, raw
@@ -361,10 +398,7 @@ impl Task for ValidationTask {
         }
         // we still have another chance to try
         // add the comment to the chat history with a explanation of what went wrong
-        let validation_message = format!(
-            "Assitant answer failed validation: {}, please try again.",
-            comment
-        );
+        let validation_message = format!("The answer is not good enough. Reason: {}", comment);
         context.add_user_message(validation_message).await;
 
         // Increment retry count for the next attempt
@@ -425,7 +459,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // --- Storage ---------------------------------------------------------------------------
-    let session_storage: Arc<dyn SessionStorage> = Arc::new(InMemorySessionStorage::new());
+
+    let database_url = std::env::var("DATABASE_URL").unwrap();
+    let session_storage: Arc<dyn SessionStorage> =
+        Arc::new(PostgresSessionStorage::connect(&database_url).await?);
     let graph_storage: Arc<dyn GraphStorage> = Arc::new(InMemoryGraphStorage::new());
 
     // --- Build graph -----------------------------------------------------------------------
@@ -469,7 +506,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Graph built and saved successfully");
 
     // --- Session --------------------------------------------------------------------------
-    let session_id = "recomm_session_001".to_string();
+    let session_id = Uuid::new_v4().to_string();
     let session = Session::new_from_task(session_id.clone(), &refine_id);
 
     // Set up context with chat history limit to prevent memory bloat
@@ -505,9 +542,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let execution = graph.execute_session(&mut current_session).await?;
         session_storage.save(current_session.clone()).await?;
 
-        if let Some(resp) = execution.response {
-            println!("Assistant: {}", resp);
-        }
+        // if let Some(resp) = execution.response {
+        //     println!("Assistant: {}", resp);
+        // }
 
         match execution.status {
             ExecutionStatus::Completed => {

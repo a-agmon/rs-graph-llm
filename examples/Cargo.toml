@@ -34,3 +34,4 @@ serde = { workspace = true }
 rand = "0.9.1"
 sqlx = { workspace = true }
 fastembed = "4" 
+uuid = "1.17.0"
