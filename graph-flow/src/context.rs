@@ -53,11 +53,11 @@ pub struct ChatHistory {
 }
 
 impl ChatHistory {
-    /// Create a new empty chat history
+    /// Create a new empty chat history with a default limit of 1000 messages
     pub fn new() -> Self {
         Self {
             messages: Vec::new(),
-            max_messages: None,
+            max_messages: Some(1000), // Default limit to prevent unbounded growth
         }
     }
 

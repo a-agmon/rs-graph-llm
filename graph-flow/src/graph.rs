@@ -1,5 +1,7 @@
 use dashmap::DashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::time::timeout;
 
 use crate::{
     context::Context,
@@ -25,6 +27,7 @@ pub struct Graph {
     tasks: DashMap<String, Arc<dyn Task>>,
     edges: Mutex<Vec<Edge>>,
     start_task_id: Mutex<Option<String>>,
+    task_timeout: Duration,
 }
 
 impl Graph {
@@ -34,7 +37,13 @@ impl Graph {
             tasks: DashMap::new(),
             edges: Mutex::new(Vec::new()),
             start_task_id: Mutex::new(None),
+            task_timeout: Duration::from_secs(300), // Default 5 minute timeout
         }
+    }
+    
+    /// Set the timeout duration for task execution
+    pub fn set_task_timeout(&mut self, timeout: Duration) {
+        self.task_timeout = timeout;
     }
 
     /// Add a task to the graph
@@ -110,6 +119,13 @@ impl Graph {
     /// Execute the graph with session management
     /// This method manages the session state and returns a simple status
     pub async fn execute_session(&self, session: &mut Session) -> Result<ExecutionResult> {
+        tracing::info!(
+            graph_id = %self.id,
+            session_id = %session.id,
+            current_task = %session.current_task_id,
+            "Starting graph execution"
+        );
+        
         // Execute ONLY the current task (not the full recursive chain)
         let result = self
             .execute_single_task(&session.current_task_id, session.context.clone())
@@ -202,12 +218,27 @@ impl Graph {
 
     /// Execute a single task without following Continue actions
     async fn execute_single_task(&self, task_id: &str, context: Context) -> Result<TaskResult> {
+        tracing::debug!(
+            task_id = %task_id,
+            "Executing single task"
+        );
+        
         let task = self
             .tasks
             .get(task_id)
             .ok_or_else(|| GraphError::TaskNotFound(task_id.to_string()))?;
 
-        let mut result = task.run(context).await?;
+        // Execute task with timeout
+        let task_future = task.run(context);
+        let mut result = match timeout(self.task_timeout, task_future).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => return Err(GraphError::TaskExecutionFailed(
+                format!("Task '{}' failed: {}", task_id, e)
+            )),
+            Err(_) => return Err(GraphError::TaskExecutionFailed(
+                format!("Task '{}' timed out after {:?}", task_id, self.task_timeout)
+            )),
+        };
 
         // Set the task_id in the result to track which task generated it
         result.task_id = task_id.to_string();
@@ -322,6 +353,40 @@ impl GraphBuilder {
     }
 
     pub fn build(self) -> Graph {
+        // Validate the graph before returning
+        if self.graph.tasks.is_empty() {
+            tracing::warn!("Building graph with no tasks");
+        }
+        
+        // Check for orphaned tasks (tasks with no incoming or outgoing edges)
+        let task_count = self.graph.tasks.len();
+        if task_count > 1 {
+            // Collect task IDs first
+            let all_task_ids: Vec<String> = self.graph.tasks.iter()
+                .map(|t| t.key().clone())
+                .collect();
+            
+            // Then check edges
+            let edges = self.graph.edges.lock().unwrap();
+            let mut connected_tasks = std::collections::HashSet::new();
+            
+            for edge in edges.iter() {
+                connected_tasks.insert(edge.from.clone());
+                connected_tasks.insert(edge.to.clone());
+            }
+            drop(edges); // Explicitly drop the lock
+            
+            // Now check for orphaned tasks
+            for task_id in all_task_ids {
+                if !connected_tasks.contains(&task_id) {
+                    tracing::warn!(
+                        task_id = %task_id,
+                        "Task has no edges - it may be unreachable"
+                    );
+                }
+            }
+        }
+        
         self.graph
     }
 }
