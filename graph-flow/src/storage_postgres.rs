@@ -48,6 +48,10 @@ impl SessionStorage for PostgresSessionStorage {
         let context_json = serde_json::to_value(&session.context)
             .map_err(|e| GraphError::StorageError(format!("Context serialization failed: {e}")))?;
 
+        // Use a transaction to ensure atomicity
+        let mut tx = self.pool.begin().await
+            .map_err(|e| GraphError::StorageError(format!("Failed to start transaction: {e}")))?;
+
         sqlx::query(
             r#"
             INSERT INTO sessions (id, graph_id, current_task_id, status_message, context, updated_at)
@@ -58,6 +62,7 @@ impl SessionStorage for PostgresSessionStorage {
                 status_message = EXCLUDED.status_message,
                 context = EXCLUDED.context,
                 updated_at = NOW()
+            WHERE sessions.updated_at <= EXCLUDED.updated_at  -- Prevent overwriting newer data
             "#,
         )
         .bind(&session.id)
@@ -65,9 +70,13 @@ impl SessionStorage for PostgresSessionStorage {
         .bind(&session.current_task_id)
         .bind(&session.status_message)
         .bind(&context_json)
-        .execute(&*self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| GraphError::StorageError(format!("Failed to save session: {e}")))?;
+        
+        tx.commit().await
+            .map_err(|e| GraphError::StorageError(format!("Failed to commit transaction: {e}")))?;
+        
         Ok(())
     }
 

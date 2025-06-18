@@ -175,44 +175,30 @@ async fn execute_graph(
         "Processing execute request"
     );
 
-    // Check if session_id was provided for validation
-    let session_id_provided = request.session_id.is_some();
-
-    // Get or create session id
-    let session_id = request
-        .session_id
-        .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-    // Validate session ID format if provided
-    if session_id_provided && Uuid::parse_str(&session_id).is_err() {
-        error!(
-            correlation_id = %correlation_id,
-            session_id = %session_id,
-            "Invalid session ID format"
-        );
-        return Err(StatusCode::BAD_REQUEST);
-    }
+    // Use provided session ID or generate a new one
+    let (session_id, is_new) = match request.session_id {
+        Some(id) => (id, false),
+        None => (Uuid::new_v4().to_string(), true),
+    };
 
     // Get or create session
     let mut session = match state.session_storage.get(&session_id).await {
         Ok(Some(session)) => session,
-        Ok(None) => {
-            // Only create new session if session_id was not provided
-            // If session_id was provided but not found, return error
-            if session_id_provided {
-                error!(
-                    correlation_id = %correlation_id,
-                    session_id = %session_id,
-                    "Session not found"
-                );
-                return Err(StatusCode::NOT_FOUND);
-            }
+        Ok(None) if is_new => {
             info!(
                 correlation_id = %correlation_id,
                 session_id = %session_id,
                 "Creating new session"
             );
             Session::new_from_task(session_id.clone(), type_name::<InitialClaimQueryTask>())
+        }
+        Ok(None) => {
+            error!(
+                correlation_id = %correlation_id,
+                session_id = %session_id,
+                "Session not found"
+            );
+            return Err(StatusCode::NOT_FOUND);
         }
         Err(e) => {
             error!(
