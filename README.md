@@ -1,19 +1,67 @@
-# rs-graph-llm | A stateful graph execution frameowrk for LLM agents built in native Rust
+# graph-flow | A LangGraph-inspired stateful graph execution framework for LLM agents built in native Rust
 
-Inspired by LangGraph and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), **rs-graph-llm** is a simple, lean, Rust-native framework for designing and running stateful, graph-driven LLM agent workflows. 
+Inspired by **LangGraph** and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), **graph-flow** is a Rust-native framework for designing and running stateful,interruptible, graph-driven LLM agent workflows.
+
+## The LangGraph Philosophy, Rust-Native
+
+The beauty of **LangGraph** lies in its elegant combination of two powerful concepts:
+- **Graph execution library** - for orchestrating complex, stateful workflows
+- **LLM ecosystem integration** (via LangChain) - for seamless AI agent capabilities
+
+This framework follows the same philosophy, but built from the ground up in Rust:
+- **[`graph-flow`](graph-flow/)** - Core graph execution library for stateful task orchestration
+- **[Rig crate](https://github.com/0xPlaygrounds/rig)** - Rust-native LLM integration and agent capabilities
+
+The result aspires to be a production-ready framework that combines LangGraph's workflow design patterns with Rust's performance, type safety, and memory efficiency.
+
+## Framework Architecture
+
+This repository demonstrates the use of this framework through practical examples:
+
+### Core Library
+- **[`graph-flow`](graph-flow/)**: The graph execution engine - handles task orchestration, state management, conditional routing, and persistence
+
+### Example Applications  
+- **[`insurance-claims-service`](insurance-claims-service/)**: Complete insurance claims processing workflow with LLM agents
+- **[`recommendation-service`](recommendation-service/)**: AI-powered recommendation system with multi-step reasoning
+- **[`examples/`](examples/)**: Simple demonstrations of core concepts
+
+> **Recommendation**: Start by exploring the examples in the examples folder. After you get the basics, take a deeper look at [`examples/recommendation_flow.rs`](examples/recommendation_flow.rs) to see a complete end-to-end workflow that showcases the framework's capabilities in a RAG use case.
 
 ## Why This Framework?
 
-LangGraph is awesome. It makes it easy to design stateful, graph-based agent workflows with built-in persistence and retries, so you can focus on the logic instead of the infrastructure. But when it comes to heavy production workloads, its Python core can become a bottleneck—performance is limited, and it imposes runtime overhead that can be costly at scale. Additionally, debugging complex async flows is often challenging, and the persistence layer—while flexible—is not always transparent or easy to integrate, with a schema that can be difficult to evolve or query directly.
+LangGraph is awesome. It makes it easy to design stateful, graph-based agent workflows with built-in persistence and retries, so you can focus on the logic instead of the infrastructure. But when it comes to heavy production workloads, its Python core can become a bottleneck as performance is limited, and it imposes runtime overhead that can be costly at scale. Additionally, debugging complex async flows is often challenging, and the persistence layer—while flexible—is not always transparent or easy to integrate, with a schema that can be difficult to evolve or query directly.
 
-*rs-graph-llm* takes the best ideas from LangGraph and tries to build them in Rust: fast, memory-efficient, and designed for production. You still get a simple graph-based model and resumable execution, but with strong typing, clear and queryable persistence (Postgres), full observability, and the reliability of a single compiled binary that can run anywhere.
+**graph-flow** tries to take the best ideas from LangGraph and implements them in Rust: fast,compiled, memory and type safe, memory-efficient, and designed for production. You still get a simple graph-based model and resumable execution, but with strong typing, clear and queryable persistence (Postgres), full observability, and the reliability of a single compiled binary that can run anywhere.
 
-## Architecture Overview
+## Framework Components Deep Dive
 
-The framework consists of two main components:
+### Graph Execution (`graph-flow`)
+The core library that provides:
+- **Task Orchestration**: Define and connect tasks in a directed graph
+- **State Management**: Thread-safe context sharing between tasks
+- **Conditional Routing**: Dynamic workflow branching based on runtime data
+- **Session Persistence**: Resumable workflows with pluggable storage backends
+- **Execution Control**: Fine-grained control over workflow progression
 
-- **[`graph-flow`](graph-flow/)**: Core library for defining and executing stateful task graphs
-- **[`insurance-claims-service`](insurance-claims-service/)**: HTTP service that exposes graph execution via REST APIs
+### LLM Integration (Rig)
+Seamless AI agent capabilities through the Rig ecosystem:
+- **Multiple LLM Providers**: OpenAI, Anthropic, OpenRouter, and more
+- **Agent Abstractions**: High-level agent interfaces with conversation management
+- **Tool Integration**: Function calling and external tool integration
+- **Structured Outputs**: Type-safe LLM response parsing
+
+## Beyond the Examples: Real Production Use
+
+The examples in this repository demonstrate practical applications of the framework:
+- **Complex multi-agent workflows** (insurance claims with conditional approval)
+- **RAG-based systems** (recommendation service with vector search)
+- **Human-in-the-loop processing** (approval workflows with state persistence)
+- **API service integration** (HTTP services wrapping graph execution)
+
+Each service showcases different aspects of building production-ready LLM agent systems with clear separation between business logic (tasks) and orchestration (graph).
+
+## Quick Start Guide
 
 ## Quick Start with Simple Example
 
@@ -518,15 +566,16 @@ let graph = GraphBuilder::new("workflow_name")
 
 ## Comparison with LangGraph
 
-| Feature | LangGraph (Python) | RS-Inter-Task (Rust) |
+| Feature | LangGraph (Python) | rs-inter-task (Rust) |
 |---------|-------------------|----------------------|
+| **Graph Execution** | LangGraph core | graph-flow crate |
+| **LLM Integration** | LangChain ecosystem | Rig crate |
 | **Type Safety** | Runtime | Compile-time |
 | **Performance** | Interpreted | Compiled |
 | **Memory Safety** | GC + Runtime errors | Compile-time guarantees |
 | **Concurrency** | GIL limitations | Native async/await |
 | **State Management** | Dict-based | Strongly typed |
 | **Error Handling** | Exception-based | Result-based |
-| **LLM Integration** | LangChain ecosystem | Rig crate |
 | **Persistence** | External required | Built-in abstractions |
 
 
@@ -541,11 +590,11 @@ let graph = GraphBuilder::new("workflow_name")
 2. **Start on my own**:
    - import the graph execution crate 
    ```toml
-   graph-flow = { git = "https://github.com/your-org/rs-inter-task.git", package = "graph-flow", rev = "main" }
+   graph-flow = { git = "https://github.com/a-agmon/rs-graph-llm.git", package = "graph-flow", rev = "main", features = ["rig"] }
    ```
    - import rig 
    - write your tasks and flow
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT License - see [LICENSE](LICENSE).
