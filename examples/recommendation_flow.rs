@@ -1,52 +1,19 @@
 use async_trait::async_trait;
 use graph_flow::GraphError::TaskExecutionFailed;
 use graph_flow::{
-    Context, ExecutionStatus, GraphBuilder, GraphStorage, InMemoryGraphStorage,
-    InMemorySessionStorage, MessageRole, NextAction, PostgresSessionStorage, SerializableMessage,
-    Session, SessionStorage, Task, TaskResult,
+    Context, ExecutionStatus, GraphBuilder, GraphStorage, InMemoryGraphStorage, NextAction,
+    PostgresSessionStorage, Session, SessionStorage, Task, TaskResult,
 };
-use rig::completion::{Chat, Message};
+use rig::completion::Chat;
 use rig::prelude::*;
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
-use tracing::{Level, error, info, warn};
+use tracing::{Level, error, info};
 use uuid::Uuid;
-
-// Import the extension trait for cleaner chat history access
-trait ContextRigExt {
-    async fn get_rig_messages(&self) -> Vec<Message>;
-}
-
-impl ContextRigExt for Context {
-    async fn get_rig_messages(&self) -> Vec<Message> {
-        let messages = self.get_all_messages().await;
-        to_rig_messages(&messages)
-    }
-}
 
 // Maximum number of retries for answer generation
 const MAX_RETRIES: u32 = 3;
-
-// -----------------------------------------------------------------------------
-// Conversion utilities for SerializableMessage to rig::completion::Message
-// -----------------------------------------------------------------------------
-
-/// Convert a SerializableMessage to a rig::completion::Message
-fn to_rig_message(msg: &SerializableMessage) -> Message {
-    match msg.role {
-        MessageRole::User => Message::user(msg.content.clone()),
-        MessageRole::Assistant => Message::assistant(msg.content.clone()),
-        // rig doesn't have a system message type, so we'll treat it as a user message
-        // with a system prefix
-        MessageRole::System => Message::user(format!("[SYSTEM] {}", msg.content)),
-    }
-}
-
-/// Convert a vector of SerializableMessage to rig::completion::Message vector
-fn to_rig_messages(messages: &[SerializableMessage]) -> Vec<Message> {
-    messages.iter().map(to_rig_message).collect()
-}
 
 // -----------------------------------------------------------------------------
 // A wrapper around `rig` so the example compiles only when OPENROUTER_API_KEY is set

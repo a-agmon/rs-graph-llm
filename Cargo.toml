@@ -1,8 +1,9 @@
 [workspace]
 members = [
     "graph-flow",
-    "graph-service",
-    "examples"
+    "insurance-claims-service",
+    "examples",
+    "recommendation-service"
 ]
 resolver = "2"
 

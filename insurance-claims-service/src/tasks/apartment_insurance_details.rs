@@ -4,22 +4,22 @@ use rig::completion::Chat;
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{chat_bridge::ContextRigExt, tasks::session_keys};
+use crate::tasks::session_keys;
 
 use super::{types::ClaimDetails, utils::get_llm_agent};
 
 #[derive(Deserialize)]
-struct CarDetailsResponse {
+struct ApartmentDetailsResponse {
     description: String,
     estimated_cost: f64,
     additional_info: Option<String>,
 }
 
-const CAR_INSURANCE_DETAILS_PROMPT: &str = r#"
-You are a car insurance claims specialist. Collect claim details efficiently.
+const APARTMENT_INSURANCE_DETAILS_PROMPT: &str = r#"
+You are an apartment insurance claims specialist. Collect claim details efficiently.
 
 Required information:
-1. DESCRIPTION: What happened (accident, damage, incident)
+1. DESCRIPTION: What happened (damage, theft, fire, flood, etc.)
 2. ESTIMATED COST: Repair/replacement cost
 
 CRITICAL: When you have complete information, respond with ONLY this JSON (no explanation, no additional text):
@@ -39,18 +39,25 @@ NEVER include explanatory text with JSON. Respond with either:
 2. Brief question only (when missing info)
 "#;
 
-/// Attempts to parse car insurance details from LLM response
-fn parse_car_details_from_response(response: &str) -> Option<(String, f64, Option<String>)> {
-    let parsed = serde_json::from_str::<CarDetailsResponse>(response.trim()).ok()?;
-    info!("Parsed car details: desc={}, cost={}", parsed.description, parsed.estimated_cost);
-    Some((parsed.description, parsed.estimated_cost, parsed.additional_info))
+/// Attempts to parse apartment insurance details from LLM response
+fn parse_apartment_details_from_response(response: &str) -> Option<(String, f64, Option<String>)> {
+    let parsed = serde_json::from_str::<ApartmentDetailsResponse>(response.trim()).ok()?;
+    info!(
+        "Parsed apartment details: desc={}, cost={}",
+        parsed.description, parsed.estimated_cost
+    );
+    Some((
+        parsed.description,
+        parsed.estimated_cost,
+        parsed.additional_info,
+    ))
 }
 
-/// Task that collects detailed information for car insurance claims
-pub struct CarInsuranceDetailsTask;
+/// Task that collects detailed information for apartment insurance claims
+pub struct ApartmentInsuranceDetailsTask;
 
 #[async_trait]
-impl Task for CarInsuranceDetailsTask {
+impl Task for ApartmentInsuranceDetailsTask {
     fn id(&self) -> &str {
         std::any::type_name::<Self>()
     }
@@ -63,11 +70,15 @@ impl Task for CarInsuranceDetailsTask {
             .await
             .ok_or_else(|| GraphError::ContextError("user_input not found".to_string()))?;
 
+        info!(
+            "Collecting apartment insurance details from input: {}",
+            user_input
+        );
+
         // Get message history from context in rig format
         let chat_history = context.get_rig_messages().await;
-
-        // Create agent with car details collection prompt
-        let agent = get_llm_agent(CAR_INSURANCE_DETAILS_PROMPT)?;
+        // Create agent with apartment details collection prompt
+        let agent = get_llm_agent(APARTMENT_INSURANCE_DETAILS_PROMPT)?;
 
         // Use chat to get response with history
         let response = agent
@@ -77,8 +88,11 @@ impl Task for CarInsuranceDetailsTask {
 
         // Add user message and assistant response to chat history
         context.add_user_message(user_input.clone()).await;
+
         // Try to parse details from response
-        if let Some((description, estimated_cost, additional_info)) = parse_car_details_from_response(&response) {
+        if let Some((description, estimated_cost, additional_info)) =
+            parse_apartment_details_from_response(&response)
+        {
             // Get existing claim details and update them
             let mut claim_details: ClaimDetails = context
                 .get(session_keys::CLAIM_DETAILS)
@@ -95,10 +109,9 @@ impl Task for CarInsuranceDetailsTask {
                 .await;
 
             let status_message = format!(
-                "Car insurance details collected - Description: {}, Cost: ${:.2} - proceeding to validation",
+                "Apartment insurance details collected - Description: {}, Cost: ${:.2} - proceeding to validation",
                 description, estimated_cost
             );
-            info!("{}", status_message);
 
             return Ok(TaskResult::new_with_status(
                 None,
@@ -109,7 +122,7 @@ impl Task for CarInsuranceDetailsTask {
 
         context.add_assistant_message(response.clone()).await;
         // If we don't have complete details, the response should be a guiding question
-        let status_message = "Collecting car insurance details - waiting for complete description and cost estimate".to_string();
+        let status_message = "Collecting apartment insurance details - waiting for complete description and cost estimate".to_string();
         Ok(TaskResult::new_with_status(
             Some(response),
             NextAction::WaitForInput,

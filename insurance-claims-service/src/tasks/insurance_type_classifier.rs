@@ -4,7 +4,7 @@ use rig::completion::Chat;
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{chat_bridge::ContextRigExt, tasks::session_keys};
+use crate::tasks::session_keys;
 
 use super::{types::ClaimDetails, utils::get_llm_agent};
 
@@ -54,8 +54,11 @@ impl Task for InsuranceTypeClassifierTask {
     }
 
     async fn run(&self, context: Context) -> Result<TaskResult> {
-        let session_id = context.get::<String>("session_id").await.unwrap_or_else(|| "unknown".to_string());
-        
+        let session_id = context
+            .get::<String>("session_id")
+            .await
+            .unwrap_or_else(|| "unknown".to_string());
+
         info!(
             session_id = %session_id,
             task_id = %self.id(),
@@ -83,7 +86,7 @@ impl Task for InsuranceTypeClassifierTask {
         // Try to parse insurance type from response
         if let Some(insurance_type) = parse_insurance_type_from_response(&response) {
             info!("Insurance type determined: {}", insurance_type);
-            
+
             // Store insurance type in session
             context
                 .set(session_keys::INSURANCE_TYPE, insurance_type.clone())
@@ -99,29 +102,33 @@ impl Task for InsuranceTypeClassifierTask {
                 .set(session_keys::CLAIM_DETAILS, claim_details)
                 .await;
 
-            let status_message = format!("Insurance type classified as: {} - proceeding to collect specific details", insurance_type);
-            
+            let status_message = format!(
+                "Insurance type classified as: {} - proceeding to collect specific details",
+                insurance_type
+            );
+
             info!(
                 task_id = %self.id(),
                 insurance_type = %insurance_type,
                 next_step = "collect_details",
                 "Classification complete, proceeding to details collection"
             );
-            
+
             return Ok(TaskResult::new_with_status(
-                None, 
-                NextAction::ContinueAndExecute, 
-                Some(status_message)
+                None,
+                NextAction::ContinueAndExecute,
+                Some(status_message),
             ));
         }
 
         // If we couldn't determine the type, the response should be a clarifying question
         context.add_assistant_message(response.clone()).await;
-        let status_message = "Waiting for insurance type classification - need more information".to_string();
+        let status_message =
+            "Waiting for insurance type classification - need more information".to_string();
         Ok(TaskResult::new_with_status(
-            Some(response), 
-            NextAction::WaitForInput, 
-            Some(status_message)
+            Some(response),
+            NextAction::WaitForInput,
+            Some(status_message),
         ))
     }
 }

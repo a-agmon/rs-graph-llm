@@ -20,7 +20,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-graph-flow = { path = "../graph-flow" }
+graph-flow = { path = "../graph-flow", features = ["rig"] }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 reqwest = { version = "0.12", features = ["json"] }

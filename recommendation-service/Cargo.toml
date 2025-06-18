@@ -1,9 +1,10 @@
 [package]
-name = "graph-flow"
+name = "recommendation-service"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+graph-flow = { path = "../graph-flow", features = ["rig"] }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
@@ -11,12 +12,11 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
-dashmap = { workspace = true }
-chrono = { version = "0.4", features = ["serde"] }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
 sqlx = { workspace = true }
-rig-core = { workspace = true, optional = true }
-
-[features]
-default = []
-rig = ["rig-core"]
+rig-core = { workspace = true }
+fastembed = "4" 

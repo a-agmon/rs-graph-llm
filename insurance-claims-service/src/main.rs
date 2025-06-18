@@ -1,4 +1,3 @@
-mod chat_bridge;
 mod tasks;
 
 use crate::tasks::{
@@ -47,8 +46,9 @@ struct ExecuteResponse {
 /// Initialize structured JSON tracing based on environment variables
 fn init_tracing() {
     let log_format = std::env::var("LOG_FORMAT").unwrap_or_else(|_| "json".to_string());
-    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "graph_service=debug,graph_flow=debug,tower_http=debug".into());
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        "insurance_claims_service=debug,graph_flow=debug,tower_http=debug".into()
+    });
 
     match log_format.as_str() {
         "pretty" => {

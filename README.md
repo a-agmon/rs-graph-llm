@@ -13,7 +13,7 @@ LangGraph is awesome. It makes it easy to design stateful, graph-based agent wor
 The framework consists of two main components:
 
 - **[`graph-flow`](graph-flow/)**: Core library for defining and executing stateful task graphs
-- **[`graph-service`](graph-service/)**: HTTP service that exposes graph execution via REST APIs
+- **[`insurance-claims-service`](insurance-claims-service/)**: HTTP service that exposes graph execution via REST APIs
 
 ## Quick Start with Simple Example
 
@@ -227,7 +227,7 @@ let session_storage = Arc::new(
 
 ## Real-World Use Case: Insurance Claims Processing
 
-The [`graph-service`](graph-service/) demonstrates a complete agentic workflow for processing insurance claims. This showcases the framework's power in building complex, multi-step AI-driven processes.
+The [`insurance-claims-service`](insurance-claims-service/) demonstrates a complete agentic workflow for processing insurance claims. This showcases the framework's power in building complex, multi-step AI-driven processes.
 
 ### The Insurance Claims Workflow
 
@@ -277,29 +277,29 @@ graph TD
 
 ### Task Breakdown
 
-#### 1. Initial Claim Query ([`initial_claim_query.rs`](graph-service/src/tasks/initial_claim_query.rs))
+#### 1. Initial Claim Query ([`initial_claim_query.rs`](insurance-claims-service/src/tasks/initial_claim_query.rs))
 - Welcomes users and gathers basic claim information
 - Uses LLM to have natural conversations
 - Extracts structured data from free-form input
 
-#### 2. Insurance Type Classifier ([`insurance_type_classifier.rs`](graph-service/src/tasks/insurance_type_classifier.rs))
+#### 2. Insurance Type Classifier ([`insurance_type_classifier.rs`](insurance-claims-service/src/tasks/insurance_type_classifier.rs))
 - Analyzes claim description to determine insurance type
 - Uses conditional edges to route to appropriate detail collector
 - Demonstrates intelligent content-based routing
 
 #### 3. Detail Collectors
-- **Car Insurance Details** ([`car_insurance_details.rs`](graph-service/src/tasks/car_insurance_details.rs))
-- **Apartment Insurance Details** ([`apartment_insurance_details.rs`](graph-service/src/tasks/apartment_insurance_details.rs))
+- **Car Insurance Details** ([`car_insurance_details.rs`](insurance-claims-service/src/tasks/car_insurance_details.rs))
+- **Apartment Insurance Details** ([`apartment_insurance_details.rs`](insurance-claims-service/src/tasks/apartment_insurance_details.rs))
 - Each specialized for their domain
 - Collect comprehensive information through AI conversations
 
-#### 4. Smart Claim Validator ([`smart_claim_validator.rs`](graph-service/src/tasks/smart_claim_validator.rs))
+#### 4. Smart Claim Validator ([`smart_claim_validator.rs`](insurance-claims-service/src/tasks/smart_claim_validator.rs))
 - **Intelligent Processing**: Auto-approves claims under $1,000
 - **Human-in-the-Loop**: Requests manual approval for larger claims
 - **Stateful Waiting**: Can pause workflow awaiting human decision
 - **Status Messaging**: Comprehensive logging and status tracking
 
-#### 5. Final Summary ([`final_summary.rs`](graph-service/src/tasks/final_summary.rs))
+#### 5. Final Summary ([`final_summary.rs`](insurance-claims-service/src/tasks/final_summary.rs))
 - Generates comprehensive claim summaries
 - Handles both approved and rejected outcomes
 - Provides clear next steps to users
@@ -375,7 +375,7 @@ export OPENROUTER_API_KEY="your-key"
 export DATABASE_URL="postgresql://user:pass@localhost/db" # Optional
 
 # Start the service
-cargo run --bin graph-service
+cargo run --bin insurance-claims-service
 
 # Test with curl
 curl -X POST http://localhost:3000/execute \

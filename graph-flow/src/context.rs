@@ -1,8 +1,11 @@
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::{Arc, RwLock};
-use chrono::{DateTime, Utc};
+
+#[cfg(feature = "rig")]
+use rig::completion::Message;
 
 /// Represents the role of a message in a conversation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -84,7 +87,7 @@ impl ChatHistory {
     /// Add a message to the chat history, respecting max_messages limit
     fn add_message(&mut self, message: SerializableMessage) {
         self.messages.push(message);
-        
+
         if let Some(max) = self.max_messages {
             if self.messages.len() > max {
                 self.messages.drain(0..(self.messages.len() - max));
@@ -156,7 +159,7 @@ impl Context {
     }
 
     // Regular context methods (unchanged API)
-    
+
     /// Set a value in the context
     pub async fn set(&self, key: impl Into<String>, value: impl serde::Serialize) {
         let value = serde_json::to_value(value).expect("Failed to serialize value");
@@ -267,6 +270,43 @@ impl Context {
             Vec::new()
         }
     }
+
+    // Rig integration methods (only available when rig feature is enabled)
+
+    #[cfg(feature = "rig")]
+    /// Get all chat history messages converted to rig::completion::Message format
+    /// This method is only available when the "rig" feature is enabled
+    pub async fn get_rig_messages(&self) -> Vec<Message> {
+        let messages = self.get_all_messages().await;
+        messages
+            .iter()
+            .map(|msg| self.to_rig_message(msg))
+            .collect()
+    }
+
+    #[cfg(feature = "rig")]
+    /// Get the last N messages converted to rig::completion::Message format
+    /// This method is only available when the "rig" feature is enabled
+    pub async fn get_last_rig_messages(&self, n: usize) -> Vec<Message> {
+        let messages = self.get_last_messages(n).await;
+        messages
+            .iter()
+            .map(|msg| self.to_rig_message(msg))
+            .collect()
+    }
+
+    #[cfg(feature = "rig")]
+    /// Convert a SerializableMessage to a rig::completion::Message
+    /// This method is only available when the "rig" feature is enabled
+    fn to_rig_message(&self, msg: &SerializableMessage) -> Message {
+        match msg.role {
+            MessageRole::User => Message::user(msg.content.clone()),
+            MessageRole::Assistant => Message::assistant(msg.content.clone()),
+            // rig doesn't have a system message type, so we'll treat it as a user message
+            // with a system prefix
+            MessageRole::System => Message::user(format!("[SYSTEM] {}", msg.content)),
+        }
+    }
 }
 
 impl Default for Context {
@@ -305,7 +345,7 @@ impl<'de> Deserialize<'de> for Context {
         D: serde::Deserializer<'de>,
     {
         let context_data = ContextData::deserialize(deserializer)?;
-        
+
         let data = Arc::new(DashMap::new());
         for (key, value) in context_data.data {
             data.insert(key, value);
@@ -324,7 +364,7 @@ mod tests {
     #[tokio::test]
     async fn test_basic_context_operations() {
         let context = Context::new();
-        
+
         context.set("key", "value").await;
         let value: Option<String> = context.get("key").await;
         assert_eq!(value, Some("value".to_string()));
@@ -333,16 +373,16 @@ mod tests {
     #[tokio::test]
     async fn test_chat_history_operations() {
         let context = Context::new();
-        
+
         assert!(context.is_chat_history_empty().await);
         assert_eq!(context.chat_history_len().await, 0);
-        
+
         context.add_user_message("Hello".to_string()).await;
         context.add_assistant_message("Hi there!".to_string()).await;
-        
+
         assert!(!context.is_chat_history_empty().await);
         assert_eq!(context.chat_history_len().await, 2);
-        
+
         let history = context.get_chat_history().await;
         assert_eq!(history.len(), 2);
         assert_eq!(history.messages()[0].content, "Hello");
@@ -354,11 +394,13 @@ mod tests {
     #[tokio::test]
     async fn test_chat_history_max_messages() {
         let context = Context::with_max_chat_messages(2);
-        
+
         context.add_user_message("Message 1".to_string()).await;
-        context.add_assistant_message("Response 1".to_string()).await;
+        context
+            .add_assistant_message("Response 1".to_string())
+            .await;
         context.add_user_message("Message 2".to_string()).await;
-        
+
         let history = context.get_chat_history().await;
         assert_eq!(history.len(), 2);
         assert_eq!(history.messages()[0].content, "Response 1");
@@ -368,12 +410,16 @@ mod tests {
     #[tokio::test]
     async fn test_last_messages() {
         let context = Context::new();
-        
+
         context.add_user_message("Message 1".to_string()).await;
-        context.add_assistant_message("Response 1".to_string()).await;
+        context
+            .add_assistant_message("Response 1".to_string())
+            .await;
         context.add_user_message("Message 2".to_string()).await;
-        context.add_assistant_message("Response 2".to_string()).await;
-        
+        context
+            .add_assistant_message("Response 2".to_string())
+            .await;
+
         let last_two = context.get_last_messages(2).await;
         assert_eq!(last_two.len(), 2);
         assert_eq!(last_two[0].content, "Message 2");
@@ -385,13 +431,13 @@ mod tests {
         let context = Context::new();
         context.set("key", "value").await;
         context.add_user_message("test message".to_string()).await;
-        
+
         let serialized = serde_json::to_string(&context).unwrap();
         let deserialized: Context = serde_json::from_str(&serialized).unwrap();
-        
+
         let value: Option<String> = deserialized.get("key").await;
         assert_eq!(value, Some("value".to_string()));
-        
+
         assert_eq!(deserialized.chat_history_len().await, 1);
         let history = deserialized.get_chat_history().await;
         assert_eq!(history.messages()[0].content, "test message");
@@ -403,10 +449,10 @@ mod tests {
         let msg = SerializableMessage::user("test content".to_string());
         assert_eq!(msg.role, MessageRole::User);
         assert_eq!(msg.content, "test content");
-        
+
         let serialized = serde_json::to_string(&msg).unwrap();
         let deserialized: SerializableMessage = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(msg.role, deserialized.role);
         assert_eq!(msg.content, deserialized.content);
     }
@@ -416,12 +462,36 @@ mod tests {
         let mut history = ChatHistory::new();
         history.add_user_message("Hello".to_string());
         history.add_assistant_message("Hi!".to_string());
-        
+
         let serialized = serde_json::to_string(&history).unwrap();
         let deserialized: ChatHistory = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(deserialized.len(), 2);
         assert_eq!(deserialized.messages()[0].content, "Hello");
         assert_eq!(deserialized.messages()[1].content, "Hi!");
+    }
+
+    #[cfg(feature = "rig")]
+    #[tokio::test]
+    async fn test_rig_integration() {
+        let context = Context::new();
+
+        context.add_user_message("Hello".to_string()).await;
+        context.add_assistant_message("Hi there!".to_string()).await;
+        context
+            .add_system_message("System message".to_string())
+            .await;
+
+        let rig_messages = context.get_rig_messages().await;
+        assert_eq!(rig_messages.len(), 3);
+
+        let last_two = context.get_last_rig_messages(2).await;
+        assert_eq!(last_two.len(), 2);
+
+        // Test that the conversion works without panicking
+        // We can't easily verify the content since rig::Message doesn't expose it directly
+        // but we can verify the conversion completes without error
+        let _debug_output = format!("{:?}", rig_messages);
+        // Test passes if we reach this point without panicking
     }
 }
