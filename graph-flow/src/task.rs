@@ -29,7 +29,13 @@ impl TaskResult {
     }
 
     /// Create a new TaskResult with response, next action, and status message
-    pub fn new_with_status(response: Option<String>, next_action: NextAction, status_message: Option<String>) -> Self {
+    /// the status message is used to describe the current state of the task.
+    ///  Its only persisted in the context but not returned to the user. Specificaly aimed at debugging and logging.
+    pub fn new_with_status(
+        response: Option<String>,
+        next_action: NextAction,
+        status_message: Option<String>,
+    ) -> Self {
         Self {
             response,
             next_action,
