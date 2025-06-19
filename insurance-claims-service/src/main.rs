@@ -13,21 +13,22 @@ use axum::{
     routing::{get, post},
 };
 use graph_flow::{
-    Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage,
+    FlowRunner, Graph, GraphBuilder, GraphStorage, InMemoryGraphStorage, InMemorySessionStorage,
     PostgresSessionStorage, Session, SessionStorage, Task,
 };
 use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::sync::Arc;
 use tasks::session_keys;
+use tower_http::cors::CorsLayer;
 use tracing::{Instrument, error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 #[derive(Clone)]
 struct AppState {
-    graph_storage: Arc<dyn GraphStorage>,
     session_storage: Arc<dyn SessionStorage>,
+    flow_runner: FlowRunner,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,6 +72,11 @@ fn init_tracing() {
                 .init();
         }
     }
+}
+
+/// Create permissive CORS layer for development/testing
+fn create_cors_layer() -> CorsLayer {
+    CorsLayer::permissive()
 }
 
 /// Middleware to add correlation ID to all requests
@@ -135,16 +141,27 @@ async fn main() {
         .await
         .expect("Failed to save default graph");
 
+    // Get the graph for FlowRunner creation
+    let graph = graph_storage
+        .get("default")
+        .await
+        .expect("Failed to get graph")
+        .expect("Graph not found");
+
+    // Create FlowRunner once, share across all requests for maximum efficiency
+    let flow_runner = FlowRunner::new(graph, session_storage.clone());
+
     let app_state = AppState {
-        graph_storage,
         session_storage,
+        flow_runner,
     };
 
-    // Build the router with correlation ID middleware
+    // Build the router with CORS and correlation ID middleware
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/execute", post(execute_graph))
         .route("/session/{id}", get(get_session))
+        .layer(create_cors_layer())
         .layer(from_fn(correlation_id_middleware))
         .with_state(app_state);
 
@@ -182,7 +199,7 @@ async fn execute_graph(
     };
 
     // Get or create session
-    let mut session = match state.session_storage.get(&session_id).await {
+    let session = match state.session_storage.get(&session_id).await {
         Ok(Some(session)) => session,
         Ok(None) if is_new => {
             info!(
@@ -219,33 +236,30 @@ async fn execute_graph(
 
     session.context.set("session_id", session_id.clone()).await;
 
-    // Get or create the relevant graph type id
-    let graph = get_or_create_graph(state.graph_storage.clone()).await?;
+    // Save the session with updated context before execution
+    if let Err(e) = state.session_storage.save(session).await {
+        error!(
+            correlation_id = %correlation_id,
+            session_id = %session_id,
+            error = %e,
+            "Failed to save session before execution"
+        );
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
 
-    // Execute the the next task in the graph
-    let result = match graph.execute_session(&mut session).await {
+    // Execute the workflow using FlowRunner (handles load → execute → save automatically)
+    let result = match state.flow_runner.run(&session_id).await {
         Ok(result) => result,
         Err(e) => {
             error!(
                 correlation_id = %correlation_id,
                 session_id = %session_id,
                 error = %e,
-                "Failed to execute graph"
+                "Failed to execute workflow"
             );
             return Err(StatusCode::INTERNAL_SERVER_ERROR);
         }
     };
-
-    // persist the session
-    if let Err(e) = state.session_storage.save(session).await {
-        error!(
-            correlation_id = %correlation_id,
-            session_id = %session_id,
-            error = %e,
-            "Failed to save session"
-        );
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
 
     info!(
         correlation_id = %correlation_id,
@@ -360,22 +374,4 @@ fn create_default_graph() -> Graph {
     builder = builder.add_edge(smart_validator_id, final_summary_id);
 
     builder.build()
-}
-
-async fn get_or_create_graph(
-    graph_storage: Arc<dyn GraphStorage>,
-) -> Result<Arc<Graph>, StatusCode> {
-    let graphid = "default";
-    // Get or create the relevant graph type id
-    match graph_storage.get(graphid).await {
-        Ok(Some(graph)) => Ok(graph),
-        Ok(None) => {
-            error!("Graph not found: {}", graphid);
-            Err(StatusCode::NOT_FOUND)
-        }
-        Err(e) => {
-            error!("Failed to get graph: {}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
-        }
-    }
 }

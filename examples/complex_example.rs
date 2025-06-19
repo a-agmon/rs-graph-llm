@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use graph_flow::{
-    Context, ExecutionStatus, GraphBuilder, GraphStorage, InMemoryGraphStorage,
+    Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
     InMemorySessionStorage, NextAction, Session, SessionStorage, Task, TaskResult,
 };
 use rig::completion::Chat;
@@ -196,7 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- Session ---------------------------------------------------------------------------------
     let session_id = "sentiment_session_001".to_string();
-    let mut session = Session::new_from_task(session_id.clone(), &sentiment_id);
+    let session = Session::new_from_task(session_id.clone(), &sentiment_id);
 
     // Seed the session context with the user input gathered on the command line
     session.context.set("user_input", user_input.clone()).await;
@@ -204,33 +204,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Persist the session before we start executing the graph
     session_storage.save(session.clone()).await?;
 
-    // --- Execution ------------------------------------------------------------------------------
+    info!(%session_id, "Session created");
+
+    // --- Execute ---------------------------------------------------------------------------------
+    let runner = FlowRunner::new(graph.clone(), session_storage.clone());
+
     loop {
-        let mut current_session = session_storage
-            .get(&session_id)
-            .await?
-            .ok_or("Session not found")?;
+        let execution_result = runner.run(&session_id).await?;
 
-        info!(task = %current_session.current_task_id, "Executing task");
-        let execution_result = graph.execute_session(&mut current_session).await?;
-        session_storage.save(current_session.clone()).await?;
-
-        if let Some(response) = execution_result.response {
-            println!("Assistant: {}", response);
+        if let Some(resp) = execution_result.response {
+            println!("Assistant: {}", resp);
         }
 
         match execution_result.status {
             ExecutionStatus::Completed => {
-                info!("Workflow completed");
+                info!("Workflow completed successfully");
                 break;
             }
             ExecutionStatus::WaitingForInput => {
-                // For brevity we end the example here. In a real application we'd collect more user input.
-                println!("The workflow is waiting for additional input – exiting example.");
-                break;
+                info!("Waiting for input, continuing...");
+                continue;
             }
-            ExecutionStatus::Error(err) => {
-                println!("Error: {}", err);
+            ExecutionStatus::Error(e) => {
+                eprintln!("Error: {}", e);
                 break;
             }
         }

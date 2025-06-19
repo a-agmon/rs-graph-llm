@@ -1,6 +1,7 @@
 pub mod context;
 pub mod error;
 pub mod graph;
+pub mod runner;
 pub mod storage;
 pub mod storage_postgres;
 pub mod task;
@@ -9,6 +10,7 @@ pub mod task;
 pub use context::{ChatHistory, Context, MessageRole, SerializableMessage};
 pub use error::{GraphError, Result};
 pub use graph::{ExecutionResult, ExecutionStatus, Graph, GraphBuilder};
+pub use runner::FlowRunner;
 pub use storage::{
     GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session, SessionStorage,
 };

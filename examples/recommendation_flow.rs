@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use graph_flow::GraphError::TaskExecutionFailed;
 use graph_flow::{
-    Context, ExecutionStatus, GraphBuilder, GraphStorage, InMemoryGraphStorage, NextAction,
-    PostgresSessionStorage, Session, SessionStorage, Task, TaskResult,
+    Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
+    NextAction, PostgresSessionStorage, Session, SessionStorage, Task, TaskResult,
 };
 use rig::completion::Chat;
 use rig::prelude::*;
@@ -23,7 +23,7 @@ fn get_llm_agent() -> anyhow::Result<rig::agent::Agent<rig::providers::openroute
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
     let client = rig::providers::openrouter::Client::new(&api_key);
-    Ok(client.agent("openai/gpt-4o-mini").build())
+    Ok(client.agent("openai/gpt-4o").build())
 }
 
 // Helper: obtain an embedding for the refined query using the `fastembed` crate.
@@ -475,43 +475,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Session --------------------------------------------------------------------------
     let session_id = Uuid::new_v4().to_string();
     let session = Session::new_from_task(session_id.clone(), &refine_id);
-
-    // Set up context with chat history limit to prevent memory bloat
-    let context_with_history = graph_flow::Context::with_max_chat_messages(50);
-    context_with_history
-        .set("user_query", user_query.clone())
-        .await;
-
-    // Replace the session's context with our chat-enabled context
-    let session = graph_flow::Session {
-        id: session.id,
-        graph_id: session.graph_id,
-        current_task_id: session.current_task_id,
-        status_message: session.status_message,
-        context: context_with_history,
-    };
-
+    session.context.set("user_query", user_query.clone()).await;
     session_storage.save(session.clone()).await?;
 
     info!(
-        "Session created with ID: {} (chat history limit: 50 messages)",
-        session_id
+        session_id = %session_id,
+        "Session created"
     );
 
     // --- Execute --------------------------------------------------------------------------
+    let flow_runner = FlowRunner::new(graph.clone(), Arc::clone(&session_storage));
+
     loop {
-        let mut current_session = session_storage
-            .get(&session_id)
-            .await?
-            .ok_or("Session not found")?;
-
-        info!("Executing task: {}", current_session.current_task_id);
-        let execution = graph.execute_session(&mut current_session).await?;
-        session_storage.save(current_session.clone()).await?;
-
-        // if let Some(resp) = execution.response {
-        //     println!("Assistant: {}", resp);
-        // }
+        let execution = flow_runner.run(&session_id).await?;
 
         match execution.status {
             ExecutionStatus::Completed => {

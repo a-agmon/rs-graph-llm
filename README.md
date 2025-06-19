@@ -1,6 +1,6 @@
 # graph-flow | A LangGraph-inspired stateful graph execution framework for LLM agents built in native Rust
 
-Inspired by **LangGraph** and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), **graph-flow** is a Rust-native framework for designing and running stateful,interruptible, graph-driven LLM agent workflows.
+Inspired by **LangGraph** and tightly integrated with [Rig](https://github.com/0xPlaygrounds/rig), **graph-flow** is a Rust-native framework for designing and running stateful, interruptible, graph-driven LLM agent workflows.
 
 ## The LangGraph Philosophy, Rust-Native
 
@@ -23,7 +23,7 @@ This repository demonstrates the use of this framework through practical example
 
 ### Example Applications  
 - **[`insurance-claims-service`](insurance-claims-service/)**: Complete insurance claims processing workflow with LLM agents
-- **[`recommendation-service`](recommendation-service/)**: AI-powered recommendation system with multi-step reasoning
+- **[`recommendation-service`](recommendation_service/)**: AI-powered recommendation system with multi-step reasoning
 - **[`examples/`](examples/)**: Simple demonstrations of core concepts
 
 > **Recommendation**: Start by exploring the examples in the examples folder. After you get the basics, take a deeper look at [`examples/recommendation_flow.rs`](examples/recommendation_flow.rs) to see a complete end-to-end workflow that showcases the framework's capabilities in a RAG use case.
@@ -32,7 +32,7 @@ This repository demonstrates the use of this framework through practical example
 
 LangGraph is awesome. It makes it easy to design stateful, graph-based agent workflows with built-in persistence and retries, so you can focus on the logic instead of the infrastructure. But when it comes to heavy production workloads, its Python core can become a bottleneck as performance is limited, and it imposes runtime overhead that can be costly at scale. Additionally, debugging complex async flows is often challenging, and the persistence layer—while flexible—is not always transparent or easy to integrate, with a schema that can be difficult to evolve or query directly.
 
-**graph-flow** tries to take the best ideas from LangGraph and implements them in Rust: fast,compiled, memory and type safe, memory-efficient, and designed for production. You still get a simple graph-based model and resumable execution, but with strong typing, clear and queryable persistence (Postgres), full observability, and the reliability of a single compiled binary that can run anywhere.
+**graph-flow** tries to take the best ideas from LangGraph and implements them in Rust: fast, compiled, memory and type safe, memory-efficient, and designed for production. You still get a simple graph-based model and resumable execution, but with strong typing, clear and queryable persistence (Postgres), full observability, and the reliability of a single compiled binary that can run anywhere.
 
 ## Framework Components Deep Dive
 
@@ -62,8 +62,6 @@ The examples in this repository demonstrate practical applications of the framew
 Each service showcases different aspects of building production-ready LLM agent systems with clear separation between business logic (tasks) and orchestration (graph).
 
 ## Quick Start Guide
-
-## Quick Start with Simple Example
 
 Let's start with the basics using [`examples/simple_example.rs`](examples/simple_example.rs):
 
@@ -103,7 +101,7 @@ impl Task for HelloTask {
 Use [`GraphBuilder`](graph-flow/src/graph.rs) to construct your workflow:
 
 ```rust
-use graph_flow::{GraphBuilder, InMemorySessionStorage, InMemoryGraphStorage};
+use graph_flow::{GraphBuilder, InMemorySessionStorage, FlowRunner};
 use std::sync::Arc;
 
 // Create task instances
@@ -118,37 +116,45 @@ let graph = Arc::new(GraphBuilder::new("greeting_workflow")
     .build());
 ```
 
-### 3. Execute with Session Management
+### 3. Execute the Workflow
 
 The framework provides **stateful execution** - workflows can be paused, resumed, and managed across multiple interactions:
 
 ```rust
-// Create storage for graphs and sessions
+// Create storage and runner
 let session_storage = Arc::new(InMemorySessionStorage::new());
-let graph_storage = Arc::new(InMemoryGraphStorage::new());
+let flow_runner = FlowRunner::new(graph.clone(), session_storage.clone());
 
 // Create a session starting from the first task
 let session = Session::new_from_task("session_001".to_string(), hello_task.id());
 session.context.set("name", "Batman".to_string()).await;
+session_storage.save(session).await?;
 
-// Execute step by step
+// Execute step by step - FlowRunner handles load/execute/save automatically
 loop {
-    // Load current session state
-    let mut current_session = session_storage.get(&session_id).await?
-        .ok_or("Session not found")?;
-
-    // Execute one step
-    // Because the step returns: NextAction::Continue it will return after executing one task
-    // If you return NextAction::ContinueAndExecute then it will NOT return and immediatly execute the next one
-    let result = graph.execute_session(&mut current_session).await?;
-
-    // Save updated state
-    session_storage.save(current_session.clone()).await?;
-
-    // Check completion status
+    let result = flow_runner.run("session_001").await?;
+    println!("Response: {:?}", result.response);
+    
     match result.status {
         ExecutionStatus::Completed => break,
-        ExecutionStatus::WaitingForInput => continue, // Wait for more input
+        ExecutionStatus::WaitingForInput => continue,
+        ExecutionStatus::Error(err) => return Err(err),
+    }
+}
+```
+
+Alternatively, you can use the lower-level API for more control:
+
+```rust
+// Manual session management
+loop {
+    let mut session = session_storage.get("session_001").await?.unwrap();
+    let result = graph.execute_session(&mut session).await?;
+    session_storage.save(session).await?;
+    
+    match result.status {
+        ExecutionStatus::Completed => break,
+        ExecutionStatus::WaitingForInput => continue,
         ExecutionStatus::Error(err) => return Err(err),
     }
 }
@@ -431,6 +437,36 @@ curl -X POST http://localhost:3000/execute \
   -d '{"content": "I need to file a claim for my car accident"}'
 ```
 
+The service demonstrates a complete HTTP API integration:
+
+```rust
+// main.rs - Create components once at startup
+struct AppState {
+    session_storage: Arc<dyn SessionStorage>,
+    flow_runner: FlowRunner,
+}
+
+// HTTP handler - execute workflow step
+async fn execute_graph(
+    State(state): State<AppState>,
+    Json(request): Json<ExecuteRequest>,
+) -> Result<Json<ExecuteResponse>, StatusCode> {
+    // Set user input in session context
+    let session = state.session_storage.get(&session_id).await?;
+    session.context.set("user_input", request.content).await;
+    state.session_storage.save(session).await?;
+    
+    // Execute one workflow step
+    let result = state.flow_runner.run(&session_id).await?;
+    
+    Ok(Json(ExecuteResponse {
+        session_id,
+        response: result.response,
+        status: format!("{:?}", result.status),
+    }))
+}
+```
+
 ### API Usage Examples
 
 #### Starting a New Claim
@@ -598,3 +634,20 @@ let graph = GraphBuilder::new("workflow_name")
 ## License
 
 MIT License - see [LICENSE](LICENSE).
+
+## Execution Approaches
+
+The framework provides two ways to execute workflows:
+
+```rust
+// High-level: FlowRunner handles session loading/saving automatically
+let runner = FlowRunner::new(graph.clone(), session_storage.clone());
+let result = runner.run(&session_id).await?;
+
+// Low-level: Manual session management for custom control
+let mut session = session_storage.get(&session_id).await?.unwrap();
+let result = graph.execute_session(&mut session).await?;
+session_storage.save(session).await?;
+```
+
+Both approaches are fully compatible and return the same `ExecutionResult`. Choose based on your needs - FlowRunner for convenience, manual for custom persistence logic or batch processing.

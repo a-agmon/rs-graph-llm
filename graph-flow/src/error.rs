@@ -20,6 +20,9 @@ pub enum GraphError {
     #[error("Storage error: {0}")]
     StorageError(String),
 
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
+
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
