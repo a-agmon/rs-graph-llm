@@ -58,10 +58,6 @@ struct QueryRefinementTask;
 
 #[async_trait]
 impl Task for QueryRefinementTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!("Starting query refinement task");
 
@@ -121,10 +117,6 @@ impl VectorSearchTask {
 
 #[async_trait]
 impl Task for VectorSearchTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!("Starting vector search task");
 
@@ -185,10 +177,6 @@ struct AnswerGenerationTask;
 
 #[async_trait]
 impl Task for AnswerGenerationTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!("Starting answer generation task");
 
@@ -273,10 +261,6 @@ struct ValidationTask;
 
 #[async_trait]
 impl Task for ValidationTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!("Starting validation task");
 
@@ -381,10 +365,6 @@ struct DeliveryTask;
 
 #[async_trait]
 impl Task for DeliveryTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!("Starting delivery task");
 

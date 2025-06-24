@@ -11,9 +11,6 @@ pub struct SmartClaimValidatorTask;
 
 #[async_trait]
 impl Task for SmartClaimValidatorTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
 
     async fn run(&self, context: Context) -> Result<TaskResult> {
         let session_id = context.get::<String>("session_id").await.unwrap_or_else(|| "unknown".to_string());

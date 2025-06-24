@@ -12,13 +12,6 @@ struct HelloTask;
 
 #[async_trait]
 impl Task for HelloTask {
-    fn id(&self) -> &str {
-        // Use the type name as the unique identifier for this task
-        // This is a simple way to ensure uniqueness in this example
-        // In a real application, you might want to use a more structured ID
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         let name: String = context.get_sync("name").unwrap();
         let greeting = format!("Hello, {}", name);
@@ -37,10 +30,6 @@ struct ExcitementTask;
 
 #[async_trait]
 impl Task for ExcitementTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         let greeting: String = context.get_sync("greeting").unwrap();
         let excited = format!("{} !!!", greeting);

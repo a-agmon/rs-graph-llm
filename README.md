@@ -77,9 +77,8 @@ struct HelloTask;
 
 #[async_trait]
 impl Task for HelloTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>() // Use type name as unique ID
-    }
+    // The id() method now has a default implementation that uses std::any::type_name::<Self>()
+    // You can override it if you need a custom identifier
 
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         // Get input from context
@@ -173,8 +172,6 @@ struct SentimentAnalysisTask;
 
 #[async_trait]
 impl Task for SentimentAnalysisTask {
-    fn id(&self) -> &str { std::any::type_name::<Self>() }
-
     async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
         // Very naive heuristic so the example works without an LLM
         let input: String = ctx.get_sync("user_input").unwrap_or_default();

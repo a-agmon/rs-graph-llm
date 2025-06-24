@@ -42,10 +42,6 @@ struct SentimentAnalysisTask;
 
 #[async_trait]
 impl Task for SentimentAnalysisTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         // Pull the user input we stored in the session context
         let user_input: String = context
@@ -112,10 +108,6 @@ struct PositiveResponseTask;
 
 #[async_trait]
 impl Task for PositiveResponseTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, _context: Context) -> graph_flow::Result<TaskResult> {
         let reply = "That is awesome to hear! Keep up the good vibes.".to_string();
         Ok(TaskResult::new(Some(reply), NextAction::End))
@@ -127,10 +119,6 @@ struct NegativeResponseTask;
 
 #[async_trait]
 impl Task for NegativeResponseTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, _context: Context) -> graph_flow::Result<TaskResult> {
         let reply = "I am sorry to hear that. Let me know if there is anything I can do to help."
             .to_string();

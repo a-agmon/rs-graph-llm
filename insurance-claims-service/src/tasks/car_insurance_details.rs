@@ -58,10 +58,6 @@ pub struct CarInsuranceDetailsTask;
 
 #[async_trait]
 impl Task for CarInsuranceDetailsTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> Result<TaskResult> {
         info!("running task: {}", self.id());
 

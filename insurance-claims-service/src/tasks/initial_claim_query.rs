@@ -23,10 +23,6 @@ pub struct InitialClaimQueryTask;
 
 #[async_trait]
 impl Task for InitialClaimQueryTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
-
     async fn run(&self, context: Context) -> Result<TaskResult> {
         let session_id = context.get::<String>("session_id").await.unwrap_or_else(|| "unknown".to_string());
         

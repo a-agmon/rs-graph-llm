@@ -84,8 +84,53 @@ pub enum NextAction {
 #[async_trait]
 pub trait Task: Send + Sync {
     /// Unique identifier for this task
-    fn id(&self) -> &str;
+    ///
+    /// By default, this returns the type name of the implementing struct.
+    /// Override this method if you need a custom identifier.
+    fn id(&self) -> &str {
+        std::any::type_name::<Self>()
+    }
 
     /// Execute the task with the given context
     async fn run(&self, context: Context) -> Result<TaskResult>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+
+    struct TestTaskWithDefaultId;
+
+    #[async_trait]
+    impl Task for TestTaskWithDefaultId {
+        async fn run(&self, _context: Context) -> Result<TaskResult> {
+            Ok(TaskResult::new(None, NextAction::End))
+        }
+    }
+
+    struct TestTaskWithCustomId;
+
+    #[async_trait]
+    impl Task for TestTaskWithCustomId {
+        fn id(&self) -> &str {
+            "custom_task_id"
+        }
+
+        async fn run(&self, _context: Context) -> Result<TaskResult> {
+            Ok(TaskResult::new(None, NextAction::End))
+        }
+    }
+
+    #[test]
+    fn test_default_id_implementation() {
+        let task = TestTaskWithDefaultId;
+        assert_eq!(task.id(), "graph_flow::task::tests::TestTaskWithDefaultId");
+    }
+
+    #[test]
+    fn test_custom_id_override() {
+        let task = TestTaskWithCustomId;
+        assert_eq!(task.id(), "custom_task_id");
+    }
 }
