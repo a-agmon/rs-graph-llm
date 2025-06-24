@@ -11,13 +11,9 @@ pub struct QueryRefinementTask;
 
 #[async_trait]
 impl Task for QueryRefinementTask {
-    fn id(&self) -> &str {
-        std::any::type_name::<Self>()
-    }
 
     async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
         info!("Starting query refinement task");
-
         let user_query: String = context
             .get_sync("user_query")
             .ok_or_else(|| TaskExecutionFailed("user_query not found in context".into()))?;
@@ -31,7 +27,7 @@ impl Task for QueryRefinementTask {
             .chat(
                 &format!(
                     r#"
-                    You are a helpful assistant that rewrites user queries for vector search.
+                    You are a helpful movie recommendation assistant that rewrites user queries for vector search.
                     Rewrite the following user query so that it is optimised for vector search. Only return the rewritten query.
                     Query: {user_query}"#
                 ),
@@ -44,10 +40,9 @@ impl Task for QueryRefinementTask {
 
         info!("Refined query: {}", refined);
         context.set("refined_query", refined.clone()).await;
-
         // Initialize retry count
         context.set("retry_count", 0u32).await;
 
-        Ok(TaskResult::new(None, NextAction::Continue))
+        Ok(TaskResult::new(None, NextAction::ContinueAndExecute))
     }
 } 

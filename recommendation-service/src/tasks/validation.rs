@@ -82,7 +82,7 @@ impl Task for ValidationTask {
             .await;
         if validation_result.passed {
             info!("Validation passed");
-            return Ok(TaskResult::new(None, NextAction::Continue));
+            return Ok(TaskResult::new(None, NextAction::ContinueAndExecute));
         }
 
         // if we are here, the validation failed - first we get the comment
@@ -112,6 +112,6 @@ impl Task for ValidationTask {
 
         // Increment retry count for the next attempt
         context.set("retry_count", retry_count + 1).await;
-        Ok(TaskResult::new(None, NextAction::Continue))
+        Ok(TaskResult::new(None, NextAction::ContinueAndExecute))
     }
 } 

@@ -80,6 +80,6 @@ impl Task for VectorSearchTask {
             .await;
         info!("Vector search completed successfully");
 
-        Ok(TaskResult::new(None, NextAction::Continue))
+        Ok(TaskResult::new(None, NextAction::ContinueAndExecute))
     }
 } 
