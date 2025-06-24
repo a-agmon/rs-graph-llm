@@ -23,7 +23,7 @@ fn get_llm_agent() -> anyhow::Result<rig::agent::Agent<rig::providers::openroute
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
     let client = rig::providers::openrouter::Client::new(&api_key);
-    Ok(client.agent("openai/gpt-4o").build())
+    Ok(client.agent("openai/gpt-4.1-mini").build())
 }
 
 // Helper: obtain an embedding for the refined query using the `fastembed` crate.

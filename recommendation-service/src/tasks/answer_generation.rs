@@ -83,6 +83,6 @@ impl Task for AnswerGenerationTask {
             .await;
         context.set("answer", answer.clone()).await;
 
-        Ok(TaskResult::new(Some(answer), NextAction::Continue))
+        Ok(TaskResult::new(Some(answer), NextAction::ContinueAndExecute))
     }
 } 

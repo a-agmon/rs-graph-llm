@@ -1,5 +1,6 @@
 mod tasks;
 
+use axum::extract::State;
 use axum::{
     extract::Query,
     http::StatusCode,
@@ -8,19 +9,18 @@ use axum::{
     Router,
 };
 use graph_flow::{
-    Context, ExecutionStatus, GraphBuilder, GraphStorage, InMemoryGraphStorage,
+    Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
     PostgresSessionStorage, Session, SessionStorage, Task,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tasks::{
+    AnswerGenerationTask, DeliveryTask, QueryRefinementTask, ValidationTask, VectorSearchTask,
+};
 use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::{error, info, Level};
 use uuid::Uuid;
-
-use tasks::{
-    AnswerGenerationTask, DeliveryTask, QueryRefinementTask, ValidationTask, VectorSearchTask,
-};
 
 #[derive(Debug, Deserialize)]
 struct RecommendationRequest {
@@ -41,43 +41,29 @@ struct ErrorResponse {
 
 #[derive(Clone)]
 struct AppState {
+    flow_runner: Arc<FlowRunner>,
     session_storage: Arc<dyn SessionStorage>,
-    graph_storage: Arc<dyn GraphStorage>,
 }
 
 async fn health_check() -> &'static str {
     "OK"
 }
 
+// Helper function to create internal server errors
+fn internal_error(message: &str) -> (StatusCode, Json<ErrorResponse>) {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: message.to_string(),
+        }),
+    )
+}
+
 async fn recommend(
     Query(params): Query<RecommendationRequest>,
-    axum::extract::State(state): axum::extract::State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<RecommendationResponse>, (StatusCode, Json<ErrorResponse>)> {
     info!("Received recommendation request: {}", params.query);
-
-    // Get the graph
-    let graph = state
-        .graph_storage
-        .get("recommendation_flow")
-        .await
-        .map_err(|e| {
-            error!("Failed to get graph: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Failed to get workflow graph".to_string(),
-                }),
-            )
-        })?
-        .ok_or_else(|| {
-            error!("Graph not found");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Workflow graph not found".to_string(),
-                }),
-            )
-        })?;
 
     // Create new session
     let session_id = Uuid::new_v4().to_string();
@@ -95,107 +81,44 @@ async fn recommend(
         context,
     };
 
-    state
-        .session_storage
-        .save(session.clone())
-        .await
-        .map_err(|e| {
-            error!("Failed to save session: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: "Failed to save session".to_string(),
-                }),
-            )
-        })?;
+    // Save initial session - FlowRunner will handle persistence during execution
+    state.session_storage.save(session).await.map_err(|e| {
+        error!("Failed to save session: {}", e);
+        internal_error("Failed to save session")
+    })?;
 
     info!("Session created with ID: {}", session_id);
 
-    // Execute workflow until completion
-    let mut final_answer = String::new();
-    loop {
-        let mut current_session = state
-            .session_storage
-            .get(&session_id)
-            .await
-            .map_err(|e| {
-                error!("Failed to get session: {}", e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: "Session not found".to_string(),
-                    }),
-                )
-            })?
-            .ok_or_else(|| {
-                error!("Session not found");
-                (
-                    StatusCode::NOT_FOUND,
-                    Json(ErrorResponse {
-                        error: "Session not found".to_string(),
-                    }),
-                )
-            })?;
+    // Execute workflow using FlowRunner - automatically handles session persistence
+    let execution = state.flow_runner.run(&session_id).await.map_err(|e| {
+        error!("Failed to execute session: {}", e);
+        internal_error(&format!("Workflow execution failed: {}", e))
+    })?;
 
-        info!("Executing task: {}", current_session.current_task_id);
-
-        let execution = graph
-            .execute_session(&mut current_session)
-            .await
-            .map_err(|e| {
-                error!("Failed to execute session: {}", e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: format!("Workflow execution failed: {}", e),
-                    }),
-                )
-            })?;
-
-        state
-            .session_storage
-            .save(current_session)
-            .await
-            .map_err(|e| {
-                error!("Failed to save session: {}", e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: "Failed to save session".to_string(),
-                    }),
-                )
-            })?;
-
-        if let Some(response) = execution.response {
-            final_answer = response;
+    // Handle execution result
+    match execution.status {
+        ExecutionStatus::Completed => {
+            info!("Workflow completed successfully");
+            let final_answer = execution
+                .response
+                .unwrap_or_else(|| "No answer generated".to_string());
+            Ok(Json(RecommendationResponse {
+                session_id,
+                answer: final_answer,
+                status: "completed".to_string(),
+            }))
         }
-
-        match execution.status {
-            ExecutionStatus::Completed => {
-                info!("Workflow completed successfully");
-                break;
-            }
-            ExecutionStatus::WaitingForInput => {
-                info!("Workflow waiting for input, continuing...");
-                continue;
-            }
-            ExecutionStatus::Error(e) => {
-                error!("Workflow error: {}", e);
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(ErrorResponse {
-                        error: format!("Workflow failed: {}", e),
-                    }),
-                ));
-            }
+        ExecutionStatus::WaitingForInput => {
+            info!("Workflow unexpectedly waiting for input");
+            Err(internal_error(
+                "Workflow is waiting for input, which is not expected in this flow",
+            ))
+        }
+        ExecutionStatus::Error(e) => {
+            error!("Workflow error: {}", e);
+            Err(internal_error(&format!("Workflow failed: {}", e)))
         }
     }
-
-    Ok(Json(RecommendationResponse {
-        session_id,
-        answer: final_answer,
-        status: "completed".to_string(),
-    }))
 }
 
 async fn setup_graph(
@@ -266,10 +189,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup graph
     setup_graph(graph_storage.clone()).await?;
 
+    // Get the graph for FlowRunner
+    let graph = graph_storage
+        .get("recommendation_flow")
+        .await?
+        .ok_or("recommendation_flow graph not found")?;
+
+    // Create FlowRunner
+    let flow_runner = Arc::new(FlowRunner::new(graph, session_storage.clone()));
+
     // Create app state
     let state = AppState {
+        flow_runner,
         session_storage,
-        graph_storage,
     };
 
     // Build router
