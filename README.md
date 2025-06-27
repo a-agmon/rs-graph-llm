@@ -2,9 +2,17 @@
 
 **graph-flow** is a high-performance, type-safe framework for building multi-agent workflow systems in Rust. This repository showcases real-world implementations and examples demonstrating how graph-flow enables complex, stateful AI agent orchestration for production environments.
 
-## Why graph-flow?
+## Why graph-flow? Why another frameowrk? 
 
-Inspired by LangGraph's workflow patterns but built for production: **compiled performance**, **type safety**, **clean database schema**, and **flexible execution models** (step-by-step, batch, or mixed) with intuitive human-in-the-loop capabilities.
+The beauty of **LangGraph** lies in its elegant combination of two powerful concepts:
+- **Graph execution library** - for orchestrating complex, stateful workflows
+- **LLM ecosystem integration** (via LangChain) - for seamless AI agent capabilities
+
+This framework follows the same philosophy, but built from the ground up in Rust:
+- **[`graph-flow`](graph-flow/)** - Core graph execution library for stateful task orchestration
+- **[Rig crate](https://github.com/0xPlaygrounds/rig)** - Rust-native LLM integration and agent capabilities
+
+The result aspires to be a production-ready framework that combines LangGraph's workflow design patterns with Rust's **performance** and **type safety**, in addition to a **clean database schema**, and **flexible execution models** (step-by-step, batch, or mixed) with intuitive human-in-the-loop capabilities.
 
 ## What's in This Repository
 
