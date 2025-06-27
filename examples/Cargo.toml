@@ -14,6 +14,7 @@ path = "complex_example.rs"
 name = "recommendation_flow"
 path = "recommendation_flow.rs"
 
+
 [package]
 name = "examples"
 version = "0.1.0"
@@ -35,3 +36,7 @@ rand = "0.9.1"
 sqlx = { workspace = true }
 fastembed = "4" 
 uuid = "1.17.0"
+pdfium-render = "0.8"
+image = "0.25"
+tempfile = "3.8"
+base64 = "0.22"

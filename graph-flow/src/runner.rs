@@ -20,34 +20,58 @@
 //!
 //! ### Pattern 1: Shared FlowRunner (RECOMMENDED)
 //! Create `FlowRunner` once at startup, share across all requests:
-//! ```rust
+//! ```rust,no_run
+//! use graph_flow::FlowRunner;
+//! use std::sync::Arc;
+//!
 //! // At startup
 //! struct AppState {
 //!     flow_runner: FlowRunner,
 //! }
 //!
-//! // In request handler
+//! // In request handler (async context)
+//! # async fn example(state: AppState, session_id: String) -> Result<(), Box<dyn std::error::Error>> {
 //! let result = state.flow_runner.run(&session_id).await?;
+//! # Ok(())
+//! # }
 //! ```
 //! **Pros**: Most efficient, zero allocation per request  
 //! **Cons**: Requires the same graph for all requests
 //!
 //! ### Pattern 2: Per-Request FlowRunner
 //! Create `FlowRunner` fresh for each request:
-//! ```rust
+//! ```rust,no_run
+//! use graph_flow::{FlowRunner, Graph, InMemorySessionStorage};
+//! use std::sync::Arc;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let graph = Arc::new(Graph::new("my-graph"));
+//! # let storage: Arc<dyn graph_flow::SessionStorage> = Arc::new(InMemorySessionStorage::new());
+//! # let session_id = "test-session";
 //! // In request handler
 //! let runner = FlowRunner::new(graph.clone(), storage.clone());
 //! let result = runner.run(&session_id).await?;
+//! # Ok(())
+//! # }
 //! ```
 //! **Pros**: Flexible, can use different graphs per request  
 //! **Cons**: Tiny allocation cost per request (still very cheap)
 //!
 //! ### Pattern 3: Manual (Original)
 //! Use `Graph::execute_session` directly:
-//! ```rust
+//! ```rust,no_run
+//! use graph_flow::{Graph, SessionStorage, InMemorySessionStorage};
+//! use std::sync::Arc;
+//!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! # let graph = Arc::new(Graph::new("my-graph"));
+//! # let storage: Arc<dyn SessionStorage> = Arc::new(InMemorySessionStorage::new());
+//! # let session_id = "test-session";
 //! let mut session = storage.get(&session_id).await?.unwrap();
 //! let result = graph.execute_session(&mut session).await?;
 //! storage.save(session).await?;
+//! # Ok(())
+//! # }
 //! ```
 //! **Pros**: Maximum control  
 //! **Cons**: More boilerplate, easy to forget session.save()
