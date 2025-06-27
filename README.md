@@ -72,23 +72,6 @@ Real-world implementations showing how to build production systems:
 - **Built-in Chat History**: LLM conversation management with full serialization
 - **Rig Integration**: Native support for LLM agents and tool calling
 
-## Framework Components Deep Dive
-
-### Graph Execution (`graph-flow`)
-The core library that provides:
-- **Task Orchestration**: Define and connect tasks in a directed graph
-- **State Management**: Thread-safe context sharing between tasks
-- **Conditional Routing**: Dynamic workflow branching based on runtime data
-- **Session Persistence**: Resumable workflows with pluggable storage backends
-- **Execution Control**: Fine-grained control over workflow progression
-
-### LLM Integration (Rig)
-Seamless AI agent capabilities through the Rig ecosystem:
-- **Multiple LLM Providers**: OpenAI, Anthropic, OpenRouter, and more
-- **Agent Abstractions**: High-level agent interfaces with conversation management
-- **Tool Integration**: Function calling and external tool integration
-- **Structured Outputs**: Type-safe LLM response parsing
-
 ## Beyond the Examples: Real Production Use
 
 The examples in this repository demonstrate practical applications of the framework:
