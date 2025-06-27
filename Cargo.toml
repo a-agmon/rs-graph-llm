@@ -3,7 +3,8 @@ members = [
     "graph-flow",
     "insurance-claims-service",
     "examples",
-    "recommendation-service"
+    "recommendation-service",
+    "medical-document-service",
 ]
 resolver = "2"
 
@@ -23,3 +24,4 @@ axum = "0.8.4"
 tower = "0.5"
 tower-http = { version = "0.6.6", features = ["trace", "cors"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "json", "macros", "uuid"] }
+pdf2image = "0.1"

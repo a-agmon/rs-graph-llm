@@ -20,6 +20,7 @@ pub struct Movie {
 
 /// Configuration for the recommendation service
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ServiceConfig {
     pub database_url: String,
     pub movies_database_url: String,
