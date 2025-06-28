@@ -1,3 +1,5 @@
+<img src="icon-llm-smaller.png" alt="graph-flow" width="200">
+
 # graph-flow | High-Performance Multi-Agent Workflow Framework
 
 **graph-flow** is a high-performance, type-safe framework for building multi-agent workflow systems in Rust. This repository showcases real-world implementations and examples demonstrating how graph-flow enables complex, stateful AI agent orchestration for production environments.
