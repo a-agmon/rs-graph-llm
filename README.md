@@ -1,11 +1,11 @@
 <div align="center">
-  <img src="icon-llm-smaller.png" alt="graph-flow" width="200">
+  <img src="image.png" alt="graph-flow" width="200">
   
   # graph-flow
   
   ### High-Performance Multi-Agent Workflow Framework
   
-  *A type-safe, production-ready framework for building complex AI agent workflows in Rust*
+  *A type-safe and flexible framework for building complex and interactive AI agent workflows in Rust*
   
   ---
 </div>
