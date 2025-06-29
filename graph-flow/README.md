@@ -115,6 +115,62 @@ let value: String = context.get("key").await.unwrap();
 let value: String = context.get_sync("key").unwrap();
 ```
 
+### Execution Control
+
+**Critical**: You must choose how your graph executes by selecting the appropriate `NextAction`:
+
+#### Step-by-Step Execution (Manual Control)
+Use `NextAction::Continue` or `NextAction::WaitForInput` when you want manual control over workflow progression:
+
+```rust
+async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
+    // Your task logic
+    Ok(TaskResult::new(Some("Done".to_string()), NextAction::Continue))
+}
+```
+
+With step-by-step execution, you need to manually run the workflow in a loop:
+
+```rust
+let flow_runner = FlowRunner::new(graph, session_storage);
+
+loop {
+    let result = flow_runner.run(&session_id).await?;
+    
+    match result.status {
+        ExecutionStatus::Completed => break,
+        ExecutionStatus::WaitingForInput => continue,  // Get user input, then continue
+        ExecutionStatus::Error(e) => return Err(e),
+    }
+}
+```
+
+#### Continuous Execution (Automatic)
+Use `NextAction::ContinueAndExecute` when you want tasks to run automatically until completion:
+
+```rust
+async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
+    // Your task logic
+    Ok(TaskResult::new(Some("Done".to_string()), NextAction::ContinueAndExecute))
+}
+```
+
+With continuous execution, the graph runs automatically until it hits `End`, `WaitForInput`, or an error:
+
+```rust
+// Single call executes the entire workflow
+let result = flow_runner.run(&session_id).await?;
+```
+
+#### NextAction Options
+
+- **`Continue`**: Move to next task, give control back to caller (step-by-step)
+- **`ContinueAndExecute`**: Move to next task and execute immediately (continuous)  
+- **`WaitForInput`**: Pause workflow, wait for user input
+- **`End`**: Complete the workflow
+- **`GoTo(task_id)`**: Jump to a specific task
+- **`GoBack`**: Return to previous task
+
 ### Graph Building
 Connect tasks to create workflows:
 

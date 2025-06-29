@@ -190,6 +190,58 @@ loop {
 }
 ```
 
+## Execution Control
+
+**Critical Concept**: You must choose how your graph executes by selecting the appropriate `NextAction` in your tasks.
+
+### Step-by-Step Execution
+Use `NextAction::Continue` or `NextAction::WaitForInput` for manual control over workflow progression:
+
+```rust
+// Task returns Continue - gives control back to caller
+Ok(TaskResult::new(Some("Done".to_string()), NextAction::Continue))
+```
+
+**Requires manual loop management:**
+
+```rust
+let flow_runner = FlowRunner::new(graph, session_storage);
+
+loop {
+    let result = flow_runner.run(&session_id).await?;
+    
+    match result.status {
+        ExecutionStatus::Completed => break,
+        ExecutionStatus::WaitingForInput => continue,  // Get user input, then continue
+        ExecutionStatus::Error(e) => return Err(e),
+    }
+}
+```
+
+### Continuous Execution
+Use `NextAction::ContinueAndExecute` for automatic task execution:
+
+```rust
+// Task returns ContinueAndExecute - continues automatically
+Ok(TaskResult::new(Some("Done".to_string()), NextAction::ContinueAndExecute))
+```
+
+**Single call executes until completion:**
+
+```rust
+// Runs automatically until End, WaitForInput, or error
+let result = flow_runner.run(&session_id).await?;
+```
+
+### NextAction Options
+
+- **`Continue`**: Move to next task, return control to caller (step-by-step)
+- **`ContinueAndExecute`**: Move to next task and execute immediately (continuous)  
+- **`WaitForInput`**: Pause workflow, wait for user input
+- **`End`**: Complete the workflow
+- **`GoTo(task_id)`**: Jump to a specific task by ID
+- **`GoBack`**: Return to previous task
+
 ## Advanced Features
 
 ### Conditional Edges
