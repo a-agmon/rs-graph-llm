@@ -167,6 +167,7 @@ loop {
     
     match result.status {
         ExecutionStatus::Completed => break,
+        ExecutionStatus::Paused { next_task_id } => continue, // Will auto-continue to next_task_id
         ExecutionStatus::WaitingForInput => continue,
         ExecutionStatus::Error(err) => return Err(err),
     }
@@ -184,6 +185,7 @@ loop {
     
     match result.status {
         ExecutionStatus::Completed => break,
+        ExecutionStatus::Paused { next_task_id } => continue, // Will auto-continue to next_task_id
         ExecutionStatus::WaitingForInput => continue,
         ExecutionStatus::Error(err) => return Err(err),
     }
@@ -212,6 +214,7 @@ loop {
     
     match result.status {
         ExecutionStatus::Completed => break,
+        ExecutionStatus::Paused { next_task_id } => continue,  // Will auto-continue to next_task_id
         ExecutionStatus::WaitingForInput => continue,  // Get user input, then continue
         ExecutionStatus::Error(e) => return Err(e),
     }
@@ -241,6 +244,31 @@ let result = flow_runner.run(&session_id).await?;
 - **`End`**: Complete the workflow
 - **`GoTo(task_id)`**: Jump to a specific task by ID
 - **`GoBack`**: Return to previous task
+
+### ExecutionStatus
+
+The graph execution engine returns an [`ExecutionStatus`](graph-flow/src/graph.rs) that provides rich context about workflow execution state:
+
+```rust
+#[derive(Debug, Clone)]
+pub enum ExecutionStatus {
+    /// Paused, will continue automatically to the specified next task
+    Paused { next_task_id: String },
+    /// Waiting for user input to continue
+    WaitingForInput,
+    /// Workflow completed successfully
+    Completed,
+    /// Error occurred during execution
+    Error(String),
+}
+```
+
+#### ExecutionStatus Variants
+
+- **`Paused { next_task_id }`**: Workflow paused but will automatically continue to the specified task on next execution. This is returned when a task uses `NextAction::Continue` or `NextAction::GoTo(task_id)`.
+- **`WaitingForInput`**: Workflow is waiting for user input before continuing. Returned when a task uses `NextAction::WaitForInput`.
+- **`Completed`**: Workflow has finished successfully. Returned when a task uses `NextAction::End`.
+- **`Error(String)`**: Workflow failed with the provided error message.
 
 ## Advanced Features
 

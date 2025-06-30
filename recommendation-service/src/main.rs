@@ -108,6 +108,12 @@ async fn recommend(
                 status: "completed".to_string(),
             }))
         }
+        ExecutionStatus::Paused { next_task_id } => {
+            info!("Workflow unexpectedly paused at task: {}", next_task_id);
+            Err(internal_error(
+                "Workflow is paused, which is not expected in this flow",
+            ))
+        }
         ExecutionStatus::WaitingForInput => {
             info!("Workflow unexpectedly waiting for input");
             Err(internal_error(

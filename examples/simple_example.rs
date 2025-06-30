@@ -94,8 +94,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Workflow completed successfully!");
                 break;
             }
+            ExecutionStatus::Paused { next_task_id } => {
+                println!("Workflow paused, will continue to task: {} – continuing...\n", next_task_id);
+                continue;
+            }
             ExecutionStatus::WaitingForInput => {
-                println!("Workflow waiting for input – continuing...\n");
+                println!("Workflow waiting for user input – continuing...\n");
                 continue;
             }
             ExecutionStatus::Error(err) => {
