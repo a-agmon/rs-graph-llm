@@ -139,16 +139,19 @@ impl Graph {
 
                 // Find the next task but don't execute it
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
-                    session.current_task_id = next_task_id;
+                    session.current_task_id = next_task_id.clone();
+                    Ok(ExecutionResult {
+                        response: result.response,
+                        status: ExecutionStatus::Paused { next_task_id },
+                    })
                 } else {
                     // No next task found, stay at current task
                     session.current_task_id = result.task_id.clone();
+                    Ok(ExecutionResult {
+                        response: result.response,
+                        status: ExecutionStatus::WaitingForInput,
+                    })
                 }
-
-                Ok(ExecutionResult {
-                    response: result.response,
-                    status: ExecutionStatus::WaitingForInput,
-                })
             }
             NextAction::ContinueAndExecute => {
                 // Update session status message if provided
@@ -197,7 +200,7 @@ impl Graph {
                     session.current_task_id = target_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::WaitingForInput,
+                        status: ExecutionStatus::Paused { next_task_id: target_id.clone() },
                     })
                 } else {
                     Err(GraphError::TaskNotFound(target_id.clone()))
@@ -400,6 +403,8 @@ pub struct ExecutionResult {
 
 #[derive(Debug, Clone)]
 pub enum ExecutionStatus {
+    /// Paused, will continue automatically to the specified next task
+    Paused { next_task_id: String },
     /// Waiting for user input to continue
     WaitingForInput,
     /// Workflow completed successfully

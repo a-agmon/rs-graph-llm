@@ -56,6 +56,13 @@ This is a Rust implementation of a LangGraph-inspired stateful graph execution f
   - `End`: Complete workflow
   - `GoTo(task_id)`: Jump to specific task
 
+#### Execution Status System
+- `ExecutionStatus` returned from workflow execution provides rich context:
+  - `Paused { next_task_id }`: Workflow paused, will continue automatically to specified task
+  - `WaitingForInput`: Workflow waiting for user input to continue
+  - `Completed`: Workflow finished successfully
+  - `Error(String)`: Workflow failed with error message
+
 #### Graph Structure
 - Built using `GraphBuilder` with fluent API
 - Supports conditional edges with runtime evaluation: `add_conditional_edge(from, condition, yes_branch, no_branch)`
@@ -118,7 +125,11 @@ Services typically expose HTTP APIs using Axum:
 1. Create session with starting task: `Session::new_from_task()`
 2. Set initial context data: `session.context.set()`
 3. Execute step-by-step: `flow_runner.run(session_id)` 
-4. Handle execution results based on `ExecutionStatus`
+4. Handle execution results based on `ExecutionStatus`:
+   - `Paused { next_task_id }`: Continue execution loop, workflow will automatically proceed
+   - `WaitingForInput`: Continue execution loop, workflow is waiting for user input
+   - `Completed`: Break execution loop, workflow finished
+   - `Error(msg)`: Handle error, break execution loop
 
 ### Storage Strategy
 - Development: Use `InMemorySessionStorage` for fast iteration
