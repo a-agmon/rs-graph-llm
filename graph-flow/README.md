@@ -709,6 +709,144 @@ mod tests {
 - `FlowRunner` provides simplified session management
 - PostgreSQL storage is now more robust with connection pooling
 
+## Project Structure
+
+This section describes the purpose and contents of each file in the graph-flow crate:
+
+### Source Files (`src/`)
+
+#### `lib.rs`
+The main library entry point that:
+- Defines the crate's public API and exports commonly used types
+- Contains comprehensive module-level documentation with examples
+- Provides a complete Quick Start guide demonstrating the basic workflow
+- Includes integration tests for graph execution and storage functionality
+
+**Public re-exports:**
+- `Context`, `ChatHistory`, `MessageRole`, `SerializableMessage`
+- `GraphError`, `Result`
+- `ExecutionResult`, `ExecutionStatus`, `Graph`, `GraphBuilder`
+- `FlowRunner`
+- `GraphStorage`, `InMemoryGraphStorage`, `InMemorySessionStorage`, `Session`, `SessionStorage`
+- `PostgresSessionStorage`
+- `NextAction`, `Task`, `TaskResult`
+
+#### `context.rs`
+Context and state management for workflows:
+- Provides both async and sync accessor methods for different use cases
+- Optional Rig integration for LLM message format conversion (behind `rig` feature flag)
+- Full serialization/deserialization support for persistence
+
+**Public types:**
+- **`Context`**: Thread-safe state container using `Arc<DashMap>` for data storage
+- **`ChatHistory`**: Specialized container for conversation management with automatic message pruning
+- **`SerializableMessage`**: Unified message format with role-based typing (User/Assistant/System)
+- **`MessageRole`**: Enum defining message sender types (`User`, `Assistant`, `System`)
+
+#### `error.rs`
+Centralized error handling:
+- Includes variants for task execution, storage, session management, and validation errors
+- Uses `thiserror` for ergonomic error handling with descriptive messages
+
+**Public types:**
+- **`GraphError`**: Comprehensive error enum with variants:
+  - `TaskExecutionFailed(String)`
+  - `GraphNotFound(String)`
+  - `InvalidEdge(String)`
+  - `TaskNotFound(String)`
+  - `ContextError(String)`
+  - `StorageError(String)`
+  - `SessionNotFound(String)`
+  - `Other(anyhow::Error)`
+- **`Result<T>`**: Type alias for `std::result::Result<T, GraphError>`
+
+#### `graph.rs`
+Core graph execution engine:
+- Supports conditional branching, task timeouts, and recursive execution
+- Session-aware execution that preserves state between calls
+- Automatic task validation and orphaned task detection
+
+**Public types:**
+- **`Graph`**: Main workflow orchestrator with task execution and flow control
+- **`GraphBuilder`**: Fluent API for constructing workflows with validation
+- **`Edge`**: Represents connections between tasks with optional condition functions
+- **`ExecutionResult`**: Contains response and execution status
+- **`ExecutionStatus`**: Enum indicating workflow state:
+  - `Paused { next_task_id: String }`
+  - `WaitingForInput`
+  - `Completed`
+  - `Error(String)`
+- **`EdgeCondition`**: Type alias for condition functions
+
+#### `runner.rs`
+High-level workflow execution wrapper:
+- Designed for interactive applications and web services
+- Handles session persistence automatically
+- Optimized for step-by-step execution with minimal overhead
+- Extensive documentation with usage patterns for different architectures
+- Error handling with automatic session rollback on failures
+
+**Public types:**
+- **`FlowRunner`**: Convenience wrapper implementing the load → execute → save pattern
+
+#### `storage.rs`
+Session and graph persistence abstractions:
+- Thread-safe implementations using `Arc<DashMap>` for concurrent access
+
+**Public types:**
+- **`Session`**: Workflow state container with id, current task, and context
+- **`SessionStorage`** trait: Abstract interface for session persistence
+- **`GraphStorage`** trait: Abstract interface for graph persistence  
+- **`InMemorySessionStorage`**: Fast in-memory implementation for development/testing
+- **`InMemoryGraphStorage`**: In-memory graph storage for development
+
+#### `storage_postgres.rs`
+Production-ready PostgreSQL storage backend:
+- Automatic database migration with proper schema creation
+- Connection pooling for high-performance concurrent access
+- JSONB storage for efficient context serialization
+- Optimistic concurrency control with timestamp-based conflict resolution
+- Comprehensive error handling with database-specific error mapping
+
+**Public types:**
+- **`PostgresSessionStorage`**: Robust PostgreSQL implementation of `SessionStorage`
+
+#### `task.rs`
+Task definition and execution control:
+- Supports both simple and complex task implementations
+- Automatic task ID generation using type names with override capability
+- Extensive examples showing different task patterns and use cases
+
+**Public types:**
+- **`Task`** trait: Core interface that all workflow steps must implement
+- **`TaskResult`**: Return type containing response and flow control information
+- **`NextAction`**: Enum controlling workflow progression:
+  - `Continue` - Step-by-step execution
+  - `ContinueAndExecute` - Continuous execution
+  - `GoTo(String)` - Jump to specific task
+  - `GoBack` - Go to previous task
+  - `End` - Terminate workflow
+  - `WaitForInput` - Pause for user input
+
+### Configuration Files
+
+#### `Cargo.toml`
+Package configuration defining:
+- Crate metadata (name, version, description, authors)
+- Dependencies with feature flags (`rig` for LLM integration)
+- Feature definitions and optional dependencies
+- Workspace configuration if part of a larger project
+
+#### `README.md`
+Comprehensive documentation including:
+- Feature overview and quick start guide
+- Complete API reference with examples
+- Advanced usage patterns and best practices
+- Performance optimization guidelines
+- Migration guides and troubleshooting information
+
+Each file is designed with a single responsibility and clear interfaces, making the codebase maintainable and extensible. The modular architecture allows users to leverage only the components they need while providing full-featured workflow capabilities out of the box.
+
 ## License
 
 MIT 
