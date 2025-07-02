@@ -1,6 +1,6 @@
 [package]
 name = "graph-flow"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 authors = ["Alon Agmon"]
 description = "A high-performance, type-safe framework for building multi-agent workflow systems in Rust"
@@ -34,4 +34,4 @@ rig-core = { version = "0.13.0", optional = true }
 
 [features]
 default = []
-rig = ["rig-core"]
+rig = ["dep:rig-core"]
