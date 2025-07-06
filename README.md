@@ -28,7 +28,7 @@ The result aspires to be a production-ready framework that combines LangGraph's 
 
 This repository contains **graph-flow** - the core framework - along with comprehensive examples and production-ready services demonstrating real-world applications:
 
-### 🏗️ **Core Framework**
+###  **Core Framework**
 - **[`graph-flow/`](graph-flow/)** - The complete framework library providing:
   - Graph execution engine with stateful task orchestration
   - Session management with pluggable storage backends
@@ -36,7 +36,7 @@ This repository contains **graph-flow** - the core framework - along with compre
   - Conditional routing and workflow control
   - Built-in chat history and LLM integration support
 
-### 🏭 **Production Services**
+###  **Examples: real use cases**
 Real-world implementations showing how to build production systems:
 
 - **[`insurance-claims-service/`](insurance-claims-service/)** - Complete insurance workflow with:
@@ -93,6 +93,10 @@ The examples in this repository demonstrate practical applications of the framew
 Each service showcases different aspects of building production-ready LLM agent systems with clear separation between business logic (tasks) and orchestration (graph).
 
 ## Quick Start Guide
+
+```
+cargo add graph-flow
+```
 
 Let's start with the basics using [`examples/simple_example.rs`](examples/simple_example.rs):
 
@@ -719,9 +723,9 @@ let graph = GraphBuilder::new("workflow_name")
     - you have a agent orchestration flow wrapper in an Axum service. 
 
 2. **Start on my own**:
-   - import the graph execution crate 
+   - import the graph execution crate
    ```toml
-   graph-flow = { git = "https://github.com/a-agmon/rs-graph-llm.git", package = "graph-flow", rev = "main", features = ["rig"] }
+   graph-flow = {version = "0.2.3", features = ["rig"]}
    ```
    - import rig 
    - write your tasks and flow
