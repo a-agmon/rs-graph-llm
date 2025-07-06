@@ -142,14 +142,20 @@ impl Graph {
                     session.current_task_id = next_task_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::Paused { next_task_id },
+                        status: ExecutionStatus::Paused { 
+                            next_task_id,
+                            reason: "Task completed, continuing to next task".to_string(),
+                        },
                     })
                 } else {
                     // No next task found, stay at current task
                     session.current_task_id = result.task_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::WaitingForInput,
+                        status: ExecutionStatus::Paused { 
+                            next_task_id: result.task_id.clone(),
+                            reason: "No outgoing edge found from current task".to_string(),
+                        },
                     })
                 }
             }
@@ -170,7 +176,10 @@ impl Graph {
                     session.current_task_id = result.task_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::WaitingForInput,
+                        status: ExecutionStatus::Paused { 
+                            next_task_id: result.task_id.clone(),
+                            reason: "No outgoing edge found from current task".to_string(),
+                        },
                     })
                 }
             }
@@ -200,7 +209,10 @@ impl Graph {
                     session.current_task_id = target_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::Paused { next_task_id: target_id.clone() },
+                        status: ExecutionStatus::Paused { 
+                            next_task_id: target_id.clone(),
+                            reason: "Task requested jump to specific task".to_string(),
+                        },
                     })
                 } else {
                     Err(GraphError::TaskNotFound(target_id.clone()))
@@ -404,7 +416,10 @@ pub struct ExecutionResult {
 #[derive(Debug, Clone)]
 pub enum ExecutionStatus {
     /// Paused, will continue automatically to the specified next task
-    Paused { next_task_id: String },
+    Paused { 
+        next_task_id: String,
+        reason: String,
+    },
     /// Waiting for user input to continue
     WaitingForInput,
     /// Workflow completed successfully

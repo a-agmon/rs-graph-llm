@@ -1,6 +1,6 @@
 [package]
 name = "graph-flow"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 authors = ["Alon Agmon"]
 description = "A high-performance, type-safe framework for building multi-agent workflow systems in Rust"

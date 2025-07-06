@@ -305,8 +305,8 @@ impl FlowRunner {
     ///     graph_flow::ExecutionStatus::WaitingForInput => {
     ///         println!("Waiting for user input: {:?}", result.response);
     ///     }
-    ///     graph_flow::ExecutionStatus::Paused { next_task_id } => {
-    ///         println!("Paused, next task: {}", next_task_id);
+    ///     graph_flow::ExecutionStatus::Paused { next_task_id, reason } => {
+    ///         println!("Paused, next task: {}, reason: {}", next_task_id, reason);
     ///     }
     ///     graph_flow::ExecutionStatus::Error(e) => {
     ///         eprintln!("Error: {}", e);
