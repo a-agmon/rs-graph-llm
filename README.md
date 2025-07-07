@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="image.png" alt="graph-flow" width="200">
+  <img src="image.png" alt="graph-flow" width="300">
   
   # graph-flow
   
