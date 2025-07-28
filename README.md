@@ -50,47 +50,13 @@ Real-world implementations showing how to build production systems:
   - Multi-step reasoning and context accumulation
   - Structured data extraction from unstructured input
 
-### 📚 **Learning Examples**  
+###  **Learning Examples**  
 - **[`examples/`](examples/)** - Progressive examples from basic to advanced:
   - `simple_example.rs` - Basic workflow concepts
   - `complex_example.rs` - Conditional routing and branching
   - `recommendation_flow.rs` - Complete RAG workflow demonstration
 
 > **Getting Started**: Begin with `examples/simple_example.rs` to understand core concepts, then explore the production services to see real-world patterns and best practices.
-
-## Core Framework Architecture
-
-**graph-flow** combines the best ideas from LangGraph with Rust's strengths for production systems. You get the same intuitive graph-based workflow model with resumable execution, but with compile-time safety, native performance, and production-ready persistence.
-
-### Key Components
-
-#### 🔧 **Graph Execution Engine**
-- **Task Orchestration**: Define and connect tasks in a directed graph
-- **Conditional Routing**: Dynamic workflow branching based on runtime data  
-- **Execution Control**: Fine-grained control over workflow progression (step-by-step vs batch)
-- **Error Handling**: Comprehensive error propagation and recovery
-
-#### 🗃️ **Session Management**  
-- **Pluggable Storage**: In-memory for development, PostgreSQL for production
-- **State Persistence**: Complete workflow state survives restarts and failures
-- **Resume Anywhere**: Workflows can be paused and resumed at any task
-- **Query-Friendly Schema**: Direct SQL access to workflow state and history
-
-#### 🧠 **Context System**
-- **Thread-Safe State**: Concurrent access to shared workflow data
-- **Type-Safe Storage**: Compile-time guarantees for data access
-- **Built-in Chat History**: LLM conversation management with full serialization
-- **Rig Integration**: Native support for LLM agents and tool calling
-
-## Beyond the Examples: Real Production Use
-
-The examples in this repository demonstrate practical applications of the framework:
-- **Complex multi-agent workflows** (insurance claims with conditional approval)
-- **RAG-based systems** (recommendation service with vector search)
-- **Human-in-the-loop processing** (approval workflows with state persistence)
-- **API service integration** (HTTP services wrapping graph execution)
-
-Each service showcases different aspects of building production-ready LLM agent systems with clear separation between business logic (tasks) and orchestration (graph).
 
 ## Quick Start Guide
 
