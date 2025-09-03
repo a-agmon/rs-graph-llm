@@ -34,7 +34,7 @@ tracing-subscriber = { workspace = true }
 serde = { workspace = true }
 rand = "0.9.1"
 sqlx = { workspace = true }
-fastembed = "4" 
+fastembed = "5.1.0" 
 uuid = "1.17.0"
 pdfium-render = "0.8"
 image = "0.25"
