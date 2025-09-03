@@ -36,7 +36,7 @@ async fn embed_query(text: &str) -> anyhow::Result<Vec<f32>> {
     let embedding = tokio::task::spawn_blocking(move || {
         use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
-        let model = TextEmbedding::try_new(
+        let mut model = TextEmbedding::try_new(
             InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(true),
         )?;
         let embeddings = model.embed(vec![input], None)?;
