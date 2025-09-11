@@ -14,6 +14,10 @@ path = "complex_example.rs"
 name = "recommendation_flow"
 path = "recommendation_flow.rs"
 
+[[bin]]
+name = "fanout_basic"
+path = "fanout_basic.rs"
+
 
 [package]
 name = "examples"
