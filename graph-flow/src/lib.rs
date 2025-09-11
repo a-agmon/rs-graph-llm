@@ -173,6 +173,7 @@ pub mod runner;
 pub mod storage;
 pub mod storage_postgres;
 pub mod task;
+pub mod fanout;
 
 // Re-export commonly used types
 pub use context::{ChatHistory, Context, MessageRole, SerializableMessage};
@@ -184,6 +185,7 @@ pub use storage::{
 };
 pub use storage_postgres::PostgresSessionStorage;
 pub use task::{NextAction, Task, TaskResult};
+pub use fanout::FanOutTask;
 
 #[cfg(test)]
 mod tests {

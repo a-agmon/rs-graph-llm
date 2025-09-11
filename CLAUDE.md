@@ -18,6 +18,7 @@ cargo run --bin simple_example
 cargo run --bin complex_example  
 cargo run --bin recommendation_flow
 cargo run --bin terminal_client
+cargo run --bin fanout_basic
 ```
 
 ### Testing

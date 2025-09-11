@@ -10,6 +10,7 @@ A high-performance, type-safe framework for building multi-agent workflow system
 - **LLM Integration**: Optional integration with Rig for AI agent capabilities
 - **Human-in-the-Loop**: Natural workflow interruption and resumption
 - **Async/Await Native**: Built from the ground up for async Rust
+ - **Parallel Blocks (FanOutTask)**: Run multiple tasks concurrently inside a single node
 
 ## Quick Start
 
@@ -850,3 +851,75 @@ Each file is designed with a single responsibility and clear interfaces, making 
 ## License
 
 MIT 
+### Parallel Execution with FanOutTask
+
+`FanOutTask` is a composite task that runs multiple child tasks concurrently, aggregates their outputs into the shared `Context`, and then continues the graph. It is the simplest way to add parallelism without changing the graph engine.
+
+Key properties:
+- Children share the same `Context` (concurrent reads/writes are supported). To avoid key collisions, `FanOutTask` stores each child’s outputs under a prefixed key by default: `fanout.<child_id>.<field>`.
+- Children’s `NextAction` is ignored (they act as units of work). The control flow is decided by the `FanOutTask` itself, which returns `NextAction::Continue` by default.
+- If any child fails, the whole `FanOutTask` fails.
+
+Basic example:
+
+```rust
+use graph_flow::{GraphBuilder, Task, TaskResult, NextAction, Context, FanOutTask};
+use async_trait::async_trait;
+use std::sync::Arc;
+
+struct Prepare; struct ChildA; struct ChildB; struct Consume;
+
+#[async_trait]
+impl Task for Prepare {
+    fn id(&self) -> &str { "prepare" }
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        ctx.set("input", "hello".to_string()).await;
+        Ok(TaskResult::new(Some("prepared".to_string()), NextAction::Continue))
+    }
+}
+
+#[async_trait]
+impl Task for ChildA {
+    fn id(&self) -> &str { "child_a" }
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        let inp: String = ctx.get("input").await.unwrap_or_default();
+        ctx.set("a_out", format!("{}-A", inp)).await;
+        Ok(TaskResult::new(Some("A done".to_string()), NextAction::End))
+    }
+}
+
+#[async_trait]
+impl Task for ChildB {
+    fn id(&self) -> &str { "child_b" }
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        let inp: String = ctx.get("input").await.unwrap_or_default();
+        ctx.set("b_out", format!("{}-B", inp)).await;
+        Ok(TaskResult::new(Some("B done".to_string()), NextAction::End))
+    }
+}
+
+#[async_trait]
+impl Task for Consume {
+    fn id(&self) -> &str { "consume" }
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        let a_resp: Option<String> = ctx.get("fanout.child_a.response").await;
+        let b_resp: Option<String> = ctx.get("fanout.child_b.response").await;
+        Ok(TaskResult::new(Some(format!("A={:?}, B={:?}", a_resp, b_resp)), NextAction::End))
+    }
+}
+
+let prepare: Arc<dyn Task> = Arc::new(Prepare);
+let child_a: Arc<dyn Task> = Arc::new(ChildA);
+let child_b: Arc<dyn Task> = Arc::new(ChildB);
+let fanout = FanOutTask::new("fan", vec![child_a.clone(), child_b.clone()]);
+let consume: Arc<dyn Task> = Arc::new(Consume);
+
+let graph = GraphBuilder::new("fanout").add_task(prepare.clone())
+    .add_task(fanout.clone())
+    .add_task(consume.clone())
+    .add_edge(prepare.id(), fanout.id())
+    .add_edge(fanout.id(), consume.id())
+    .build();
+```
+
+See a runnable example at `graph-flow/examples/fanout_basic.rs`.

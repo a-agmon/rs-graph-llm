@@ -341,6 +341,102 @@ let recent = context.get_last_messages(5).await;
 let serialized = serde_json::to_string(&context).unwrap();
 ```
 
+### Parallel Task Execution (FanOut)
+
+The framework provides built-in support for parallel task execution through the [`FanOutTask`](graph-flow/src/fanout.rs). This composite task runs multiple child tasks concurrently, waits for completion, and aggregates their results.
+
+#### Key Features
+- **Concurrent Execution**: Child tasks run in parallel using Tokio
+- **Result Aggregation**: Outputs stored in context with prefixed keys
+- **Error Handling**: Conservative error policy - any child failure causes FanOut to fail
+- **Simple Integration**: Works seamlessly with existing graph structure
+
+#### Important Limitations
+- **No Control Flow**: Child tasks' `NextAction` is ignored - they cannot return `WaitForInput` or create branches
+- **Shared Context**: All children share the same context (coordinate writes to avoid conflicts)
+- **Linear Continuation**: FanOut always returns `NextAction::Continue` by default
+
+#### Basic Usage
+
+See the complete example in [`examples/fanout_basic.rs`](examples/fanout_basic.rs):
+
+```rust
+use graph_flow::{FanOutTask, GraphBuilder, Task, TaskResult, NextAction, Context};
+
+// Define child tasks that will run in parallel
+struct ChildA;
+struct ChildB;
+
+#[async_trait]
+impl Task for ChildA {
+    fn id(&self) -> &str { "child_a" }
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        let input: String = ctx.get("input").await.unwrap_or_default();
+        ctx.set("a_out", format!("{}-A", input)).await;
+        Ok(TaskResult::new(Some("A done".to_string()), NextAction::End))
+    }
+}
+
+// Create FanOut task with children
+let fanout = FanOutTask::new("fanout", vec![
+    Arc::new(ChildA), 
+    Arc::new(ChildB)
+]);
+
+// Build graph normally - FanOut is just another task
+let graph = GraphBuilder::new("fanout_demo")
+    .add_task(prepare_task)
+    .add_task(fanout.clone())
+    .add_task(consume_task)
+    .add_edge(prepare_task.id(), fanout.id())
+    .add_edge(fanout.id(), consume_task.id())
+    .build();
+```
+
+#### Result Aggregation
+
+FanOut automatically stores child results in the context:
+
+```rust
+// Default aggregation keys (without prefix)
+// fanout.child_a.response - child's response message
+// fanout.child_a.status   - child's status message  
+// fanout.child_a.next_action - diagnostic info
+
+// With custom prefix
+let fanout = FanOutTask::new("fanout", children)
+    .with_prefix("parallel");
+
+// Results stored as:
+// parallel.child_a.response
+// parallel.child_b.response
+```
+
+#### Consuming Results
+
+Downstream tasks can access aggregated results:
+
+```rust
+struct ConsumeResults;
+
+#[async_trait] 
+impl Task for ConsumeResults {
+    async fn run(&self, ctx: Context) -> graph_flow::Result<TaskResult> {
+        // Read results from both children
+        let a_response: Option<String> = ctx.get("fanout.child_a.response").await;
+        let b_response: Option<String> = ctx.get("fanout.child_b.response").await;
+        
+        let summary = format!("A: {:?}, B: {:?}", a_response, b_response);
+        Ok(TaskResult::new(Some(summary), NextAction::End))
+    }
+}
+```
+
+Run the complete example:
+```bash
+cargo run --bin fanout_basic
+```
+
 ### Storage Abstraction
 
 Pluggable storage backends for production deployment:
