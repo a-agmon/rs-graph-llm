@@ -596,6 +596,15 @@ impl Context {
         self.data.insert(key.into(), value);
     }
 
+    /// Serialize all context key-value pairs to a JSON Value (object).
+    pub async fn serialize(&self) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+        for entry in self.data.iter() {
+            map.insert(entry.key().clone(), entry.value().clone());
+        }
+        serde_json::Value::Object(map)
+    }
+
     // Chat history methods
 
     /// Add a user message to the chat history.

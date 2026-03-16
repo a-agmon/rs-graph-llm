@@ -137,9 +137,11 @@
 use std::sync::Arc;
 
 use crate::{
+    context::Context,
     error::{GraphError, Result},
-    graph::{ExecutionResult, Graph},
-    storage::SessionStorage,
+    graph::{ExecutionResult, ExecutionStatus, Graph},
+    run_config::RunConfig,
+    storage::{Session, SessionStorage},
 };
 
 /// High-level helper that orchestrates the common _load → execute → save_ pattern.
@@ -390,5 +392,160 @@ impl FlowRunner {
         self.storage.save(session).await?;
 
         Ok(result)
+    }
+
+    /// Execute one step with runtime configuration.
+    ///
+    /// Respects `RunConfig` settings including:
+    /// - Dynamic breakpoints (interrupt_before / interrupt_after)
+    /// - Timeout override
+    /// - Tags and metadata stored in context
+    pub async fn run_with_config(
+        &self,
+        session_id: &str,
+        config: &RunConfig,
+    ) -> Result<ExecutionResult> {
+        let mut session = self
+            .storage
+            .get(session_id)
+            .await?
+            .ok_or_else(|| GraphError::SessionNotFound(session_id.to_string()))?;
+
+        // Store config metadata in context for observability
+        if !config.tags.is_empty() {
+            session
+                .context
+                .set("__run_tags", config.tags.clone())
+                .await;
+        }
+        if !config.metadata.is_empty() {
+            session
+                .context
+                .set("__run_metadata", config.metadata.clone())
+                .await;
+        }
+
+        // Check interrupt_before
+        if config
+            .breakpoints
+            .should_interrupt_before(&session.current_task_id)
+        {
+            self.storage.save(session.clone()).await?;
+            return Ok(ExecutionResult {
+                response: None,
+                status: ExecutionStatus::WaitingForInput,
+            });
+        }
+
+        // Execute with optional timeout override
+        let result = if let Some(timeout_dur) = config.timeout {
+            match tokio::time::timeout(timeout_dur, self.graph.execute_session(&mut session)).await
+            {
+                Ok(r) => r?,
+                Err(_) => {
+                    self.storage.save(session).await?;
+                    return Ok(ExecutionResult {
+                        response: None,
+                        status: ExecutionStatus::Error(format!(
+                            "Execution timed out after {:?}",
+                            timeout_dur
+                        )),
+                    });
+                }
+            }
+        } else {
+            self.graph.execute_session(&mut session).await?
+        };
+
+        // Check interrupt_after (use the task that just ran from history)
+        let last_task = session.task_history.last().cloned().unwrap_or_default();
+        if config.breakpoints.should_interrupt_after(&last_task) {
+            self.storage.save(session).await?;
+            return Ok(ExecutionResult {
+                response: result.response,
+                status: ExecutionStatus::WaitingForInput,
+            });
+        }
+
+        self.storage.save(session).await?;
+        Ok(result)
+    }
+
+    /// Execute the graph for multiple inputs in parallel (batch invoke).
+    ///
+    /// Each input `Context` gets its own session. Results are returned
+    /// in the same order as the inputs.
+    ///
+    /// # Parameters
+    ///
+    /// * `start_task` - The starting task ID for all sessions
+    /// * `inputs` - Vector of contexts, one per input
+    ///
+    /// # Returns
+    ///
+    /// Vector of `ExecutionResult`s in the same order as inputs.
+    /// Each result represents running the graph to completion for that input.
+    pub async fn run_batch(
+        &self,
+        start_task: &str,
+        inputs: Vec<Context>,
+    ) -> Vec<Result<ExecutionResult>> {
+        let mut handles = Vec::with_capacity(inputs.len());
+
+        for (i, ctx) in inputs.into_iter().enumerate() {
+            let session_id = format!("__batch_{}_{}", start_task, i);
+            let session = Session::new_from_task(session_id.clone(), start_task);
+            // Copy context data into the session
+            // We use a new session with the provided context
+            let mut session_with_ctx = session;
+            session_with_ctx.context = ctx;
+
+            let storage = self.storage.clone();
+            let graph = self.graph.clone();
+
+            handles.push(tokio::spawn(async move {
+                storage.save(session_with_ctx).await?;
+
+                let mut final_result = None;
+                for _ in 0..100 {
+                    // safety limit
+                    let mut session = storage
+                        .get(&session_id)
+                        .await?
+                        .ok_or_else(|| GraphError::SessionNotFound(session_id.clone()))?;
+
+                    let result = graph.execute_session(&mut session).await?;
+                    storage.save(session).await?;
+
+                    let done = matches!(
+                        result.status,
+                        ExecutionStatus::Completed
+                            | ExecutionStatus::WaitingForInput
+                            | ExecutionStatus::Error(_)
+                    );
+                    final_result = Some(result);
+                    if done {
+                        break;
+                    }
+                }
+
+                Ok(final_result.unwrap_or(ExecutionResult {
+                    response: None,
+                    status: ExecutionStatus::Error("Batch execution exceeded step limit".into()),
+                }))
+            }));
+        }
+
+        let mut results = Vec::with_capacity(handles.len());
+        for handle in handles {
+            match handle.await {
+                Ok(r) => results.push(r),
+                Err(e) => results.push(Err(GraphError::TaskExecutionFailed(format!(
+                    "Batch task panicked: {}",
+                    e
+                )))),
+            }
+        }
+        results
     }
 }

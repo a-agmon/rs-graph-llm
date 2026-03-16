@@ -237,6 +237,92 @@ impl StreamingRunner {
         Ok(result)
     }
 
+    /// Execute with a specific stream mode, controlling what data is emitted.
+    ///
+    /// # Stream Modes
+    ///
+    /// - `Values`: emit full context state after each task
+    /// - `Updates`: emit only changed context keys after each task
+    /// - `Messages`: emit only chat messages
+    /// - `Debug`: emit everything (state + timing + routing = PET scan trace)
+    pub async fn run_streaming_with_mode(
+        &self,
+        session_id: &str,
+        sender: mpsc::Sender<StreamChunk>,
+        mode: StreamMode,
+    ) -> Result<ExecutionResult> {
+        let mut session = self
+            .storage
+            .get(session_id)
+            .await?
+            .ok_or_else(|| GraphError::SessionNotFound(session_id.to_string()))?;
+
+        // Capture state before execution for "Updates" mode
+        let pre_state: Option<serde_json::Value> = if matches!(mode, StreamMode::Updates) {
+            Some(session.context.serialize().await)
+        } else {
+            None
+        };
+
+        let start = std::time::Instant::now();
+        let result = self.graph.execute_session(&mut session).await?;
+        let elapsed = start.elapsed().as_millis() as u64;
+
+        let is_final = matches!(
+            result.status,
+            ExecutionStatus::Completed | ExecutionStatus::WaitingForInput
+        );
+
+        let data = match mode {
+            StreamMode::Values => {
+                // Full state after task
+                session.context.serialize().await
+            }
+            StreamMode::Updates => {
+                // Only changed keys
+                let post_state = session.context.serialize().await;
+                compute_diff(pre_state.as_ref(), &post_state)
+            }
+            StreamMode::Messages => {
+                // Only chat messages
+                let history = session.context.get_chat_history().await;
+                serde_json::to_value(history.messages()).unwrap_or(serde_json::json!([]))
+            }
+            StreamMode::Debug => {
+                // Everything: state + timing + routing + PET scan
+                serde_json::json!({
+                    "response": result.response,
+                    "state": session.context.serialize().await,
+                    "task_id": session.current_task_id,
+                    "elapsed_ms": elapsed,
+                    "status": format!("{:?}", result.status),
+                    "task_history": session.task_history,
+                })
+            }
+            StreamMode::Custom(_) => {
+                serde_json::json!({ "response": result.response })
+            }
+        };
+
+        let chunk = StreamChunk {
+            task_id: session.current_task_id.clone(),
+            data,
+            is_final,
+            metadata: Some(StreamMetadata {
+                status: format!("{:?}", result.status),
+                next_task_id: match &result.status {
+                    ExecutionStatus::Paused { next_task_id, .. } => Some(next_task_id.clone()),
+                    _ => None,
+                },
+                elapsed_ms: Some(elapsed),
+            }),
+        };
+        let _ = sender.send(chunk).await;
+
+        self.storage.save(session).await?;
+        Ok(result)
+    }
+
     /// Internal: execute graph with streaming, following ContinueAndExecute chains.
     async fn execute_streaming(
         &self,
@@ -271,6 +357,51 @@ impl StreamingRunner {
 
         Ok(result)
     }
+}
+
+/// Stream mode controlling what data is emitted in each chunk.
+///
+/// Maps to LangGraph's `stream_mode` parameter.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StreamMode {
+    /// Emit full context state after each task.
+    Values,
+    /// Emit only changed context keys (delta) after each task.
+    Updates,
+    /// Emit only chat messages.
+    Messages,
+    /// Emit everything: state + timing + routing decisions (PET scan trace).
+    Debug,
+    /// Custom stream mode.
+    Custom(String),
+}
+
+/// Compute the diff between two serialized context states.
+fn compute_diff(pre: Option<&serde_json::Value>, post: &serde_json::Value) -> serde_json::Value {
+    let pre = match pre {
+        Some(v) => v,
+        None => return post.clone(),
+    };
+
+    let pre_map = match pre.as_object() {
+        Some(m) => m,
+        None => return post.clone(),
+    };
+    let post_map = match post.as_object() {
+        Some(m) => m,
+        None => return post.clone(),
+    };
+
+    let mut diff = serde_json::Map::new();
+    for (k, v) in post_map {
+        match pre_map.get(k) {
+            Some(old_v) if old_v == v => {} // unchanged
+            _ => {
+                diff.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    serde_json::Value::Object(diff)
 }
 
 #[cfg(test)]

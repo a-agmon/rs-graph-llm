@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "graph-flow",
+    "graph-flow-server",
     "insurance-claims-service",
     "examples",
     "recommendation-service",

@@ -182,6 +182,12 @@ pub mod lance_storage;
 pub mod agents;
 pub mod thinking;
 pub mod compat;
+pub mod retry;
+pub mod channels;
+pub mod run_config;
+pub mod tool_result;
+pub mod task_registry;
+pub mod react_agent;
 
 // Re-export commonly used types
 pub use context::{ChatHistory, Context, MessageRole, SerializableMessage};
@@ -194,13 +200,19 @@ pub use storage::{
 pub use storage_postgres::PostgresSessionStorage;
 pub use task::{NextAction, Task, TaskResult};
 pub use fanout::FanOutTask;
-pub use streaming::{StreamChunk, StreamingRunner, StreamingTask};
+pub use streaming::{StreamChunk, StreamMode, StreamingRunner, StreamingTask};
 pub use typed_context::{State, TypedContext};
 pub use subgraph::SubgraphTask;
 pub use mcp_tool::{McpToolConfig, MockMcpToolTask};
 #[cfg(feature = "mcp")]
 pub use mcp_tool::McpToolTask;
 pub use lance_storage::LanceSessionStorage;
+pub use retry::{BackoffStrategy, RetryPolicy};
+pub use channels::{ChannelConfig, ChannelReducer, Channels};
+pub use run_config::{BreakpointConfig, RunConfig};
+pub use tool_result::ToolResult;
+pub use task_registry::TaskRegistry;
+pub use react_agent::create_react_agent;
 
 #[cfg(test)]
 mod tests {
@@ -269,6 +281,7 @@ mod tests {
             current_task_id: "task1".to_string(),
             status_message: None,
             context: Context::new(),
+            task_history: Vec::new(),
         };
 
         session_storage.save(session.clone()).await.unwrap();

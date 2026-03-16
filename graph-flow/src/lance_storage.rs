@@ -158,6 +158,38 @@ impl LanceSessionStorage {
             .get(session_id)
             .and_then(|versions| versions.last().map(|v| v.version))
     }
+
+    /// Save a session with checkpoint namespace.
+    ///
+    /// The namespace is prepended to the session ID, allowing multiple
+    /// namespaces to coexist in the same storage.
+    pub async fn save_namespaced(
+        &self,
+        session: Session,
+        namespace: &str,
+    ) -> Result<()> {
+        let mut namespaced = session;
+        namespaced.id = format!("{}:{}", namespace, namespaced.id);
+        self.save(namespaced).await
+    }
+
+    /// Get a session from a specific namespace.
+    pub async fn get_namespaced(
+        &self,
+        session_id: &str,
+        namespace: &str,
+    ) -> Result<Option<Session>> {
+        let key = format!("{}:{}", namespace, session_id);
+        self.get(&key).await.map(|opt| {
+            opt.map(|mut s| {
+                // Strip namespace prefix from ID before returning
+                if let Some(stripped) = s.id.strip_prefix(&format!("{}:", namespace)) {
+                    s.id = stripped.to_string();
+                }
+                s
+            })
+        })
+    }
 }
 
 #[async_trait]
@@ -203,6 +235,7 @@ mod tests {
             current_task_id: task.to_string(),
             status_message: None,
             context: Context::new(),
+            task_history: Vec::new(),
         }
     }
 
@@ -319,5 +352,26 @@ mod tests {
     async fn test_nonexistent_session() {
         let storage = LanceSessionStorage::new("/tmp/test.lance");
         assert!(storage.get("nonexistent").await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_checkpoint_namespacing() {
+        let storage = LanceSessionStorage::new("/tmp/test.lance");
+
+        let session_a = make_session("s1", "task_a");
+        let session_b = make_session("s1", "task_b");
+
+        // Save same session ID in different namespaces
+        storage.save_namespaced(session_a, "ns1").await.unwrap();
+        storage.save_namespaced(session_b, "ns2").await.unwrap();
+
+        // Retrieve from each namespace
+        let a = storage.get_namespaced("s1", "ns1").await.unwrap().unwrap();
+        let b = storage.get_namespaced("s1", "ns2").await.unwrap().unwrap();
+
+        assert_eq!(a.current_task_id, "task_a");
+        assert_eq!(b.current_task_id, "task_b");
+        assert_eq!(a.id, "s1"); // namespace stripped
+        assert_eq!(b.id, "s1");
     }
 }

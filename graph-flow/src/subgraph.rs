@@ -126,6 +126,7 @@ impl Task for SubgraphTask {
             current_task_id: start_task_id,
             status_message: None,
             context: context.clone(),
+            task_history: Vec::new(),
         };
 
         // Apply input mappings (copy values within the shared context)
@@ -300,6 +301,7 @@ mod tests {
             current_task_id: "double".to_string(),
             status_message: None,
             context: ctx.clone(),
+            task_history: Vec::new(),
         };
 
         // Step 1: double (3 -> 6)

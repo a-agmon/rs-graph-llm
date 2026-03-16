@@ -58,21 +58,9 @@ impl RoutingDecision {
     }
 }
 
-/// Stream modes supported by the execution engine.
-/// Maps to LangGraph's `stream_mode` parameter.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StreamMode {
-    /// Stream state values after each node
-    Values,
-    /// Stream only the updates (deltas) from each node
-    Updates,
-    /// Stream individual messages
-    Messages,
-    /// Stream debug information
-    Debug,
-    /// Custom stream mode
-    Custom(String),
-}
+// StreamMode is now defined in streaming.rs and re-exported from lib.rs.
+// For backwards compatibility, re-export it here.
+pub use crate::streaming::StreamMode;
 
 /// Command type for controlling graph execution.
 /// Maps to LangGraph's `Command` class.
@@ -314,7 +302,6 @@ mod tests {
         let graph = sg.compile();
         assert_eq!(graph.start_task_id(), Some("a".to_string()));
 
-        let ctx = Context::new();
         let mut session = crate::Session::new_from_task("s1".to_string(), "a");
         let _ = graph.execute_session(&mut session).await.unwrap();
         let _ = graph.execute_session(&mut session).await.unwrap();

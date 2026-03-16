@@ -1,4 +1,5 @@
 use dashmap::DashMap;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::time::timeout;
@@ -13,6 +14,18 @@ use crate::{
 /// Type alias for edge condition functions
 pub type EdgeCondition = Arc<dyn Fn(&Context) -> bool + Send + Sync>;
 
+/// Type alias for N-way path functions that return a routing key string.
+pub type PathFunction = Arc<dyn Fn(&Context) -> String + Send + Sync>;
+
+/// An N-way conditional edge: calls `path_fn` and looks up the result in `path_map`.
+#[derive(Clone)]
+pub struct ConditionalEdgeSet {
+    pub from: String,
+    pub path_fn: PathFunction,
+    /// Maps path function return values to target task IDs.
+    pub path_map: HashMap<String, String>,
+}
+
 /// Edge between tasks in the graph
 #[derive(Clone)]
 pub struct Edge {
@@ -26,6 +39,7 @@ pub struct Graph {
     pub id: String,
     tasks: DashMap<String, Arc<dyn Task>>,
     edges: Mutex<Vec<Edge>>,
+    conditional_edge_sets: Mutex<Vec<ConditionalEdgeSet>>,
     start_task_id: Mutex<Option<String>>,
     task_timeout: Duration,
 }
@@ -36,6 +50,7 @@ impl Graph {
             id: id.into(),
             tasks: DashMap::new(),
             edges: Mutex::new(Vec::new()),
+            conditional_edge_sets: Mutex::new(Vec::new()),
             start_task_id: Mutex::new(None),
             task_timeout: Duration::from_secs(300), // Default 5 minute timeout
         }
@@ -116,6 +131,29 @@ impl Graph {
         self
     }
 
+    /// Add N-way conditional edges based on a path function and a path map.
+    ///
+    /// The `path_fn` is called with the context and returns a routing key string.
+    /// The routing key is looked up in `path_map` to determine the target task.
+    ///
+    /// This is the equivalent of LangGraph's `add_conditional_edges(source, path_fn, path_map)`.
+    pub fn add_conditional_edges<F>(
+        &self,
+        from: impl Into<String>,
+        path_fn: F,
+        path_map: HashMap<String, String>,
+    ) -> &Self
+    where
+        F: Fn(&Context) -> String + Send + Sync + 'static,
+    {
+        self.conditional_edge_sets.lock().unwrap().push(ConditionalEdgeSet {
+            from: from.into(),
+            path_fn: Arc::new(path_fn),
+            path_map,
+        });
+        self
+    }
+
     /// Execute the graph with session management
     /// This method manages the session state and returns a simple status
     pub async fn execute_session(&self, session: &mut Session) -> Result<ExecutionResult> {
@@ -139,10 +177,10 @@ impl Graph {
 
                 // Find the next task but don't execute it
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
-                    session.current_task_id = next_task_id.clone();
+                    session.advance_to(next_task_id.clone());
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::Paused { 
+                        status: ExecutionStatus::Paused {
                             next_task_id,
                             reason: "Task completed, continuing to next task".to_string(),
                         },
@@ -152,7 +190,7 @@ impl Graph {
                     session.current_task_id = result.task_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::Paused { 
+                        status: ExecutionStatus::Paused {
                             next_task_id: result.task_id.clone(),
                             reason: "No outgoing edge found from current task".to_string(),
                         },
@@ -165,9 +203,7 @@ impl Graph {
 
                 // Find the next task and execute it immediately (recursive behavior)
                 if let Some(next_task_id) = self.find_next_task(&result.task_id, &session.context) {
-                    // Instead of using the old execute method that clones context,
-                    // continue executing in session mode to preserve context updates
-                    session.current_task_id = next_task_id;
+                    session.advance_to(next_task_id);
 
                     // Recursively call execute_session to maintain proper context sharing
                     return Box::pin(self.execute_session(session)).await;
@@ -176,7 +212,7 @@ impl Graph {
                     session.current_task_id = result.task_id.clone();
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::Paused { 
+                        status: ExecutionStatus::Paused {
                             next_task_id: result.task_id.clone(),
                             reason: "No outgoing edge found from current task".to_string(),
                         },
@@ -206,10 +242,10 @@ impl Graph {
                 // Update session status message if provided
                 session.status_message = result.status_message.clone();
                 if self.tasks.contains_key(target_id) {
-                    session.current_task_id = target_id.clone();
+                    session.advance_to(target_id.clone());
                     Ok(ExecutionResult {
                         response: result.response,
-                        status: ExecutionStatus::Paused { 
+                        status: ExecutionStatus::Paused {
                             next_task_id: target_id.clone(),
                             reason: "Task requested jump to specific task".to_string(),
                         },
@@ -219,14 +255,23 @@ impl Graph {
                 }
             }
             NextAction::GoBack => {
-                // Update session status message if provided
                 session.status_message = result.status_message.clone();
-                // For now, stay at current task - could implement back navigation logic later
-                session.current_task_id = result.task_id.clone();
-                Ok(ExecutionResult {
-                    response: result.response,
-                    status: ExecutionStatus::WaitingForInput,
-                })
+                if let Some(prev_task_id) = session.go_back() {
+                    Ok(ExecutionResult {
+                        response: result.response,
+                        status: ExecutionStatus::Paused {
+                            next_task_id: prev_task_id,
+                            reason: "Navigated back to previous task".to_string(),
+                        },
+                    })
+                } else {
+                    // No history to go back to — stay at current task
+                    session.current_task_id = result.task_id.clone();
+                    Ok(ExecutionResult {
+                        response: result.response,
+                        status: ExecutionStatus::WaitingForInput,
+                    })
+                }
             }
         }
     }
@@ -300,10 +345,26 @@ impl Graph {
         }
     }
 
-    /// Find the next task based on edges and conditions
+    /// Find the next task based on edges and conditions.
+    ///
+    /// Priority order:
+    /// 1. N-way conditional edge sets (path function + path map)
+    /// 2. Binary conditional edges (predicate-based)
+    /// 3. Unconditional edges (fallback)
     pub fn find_next_task(&self, current_task_id: &str, context: &Context) -> Option<String> {
-        let edges = self.edges.lock().unwrap();
+        // 1. Check N-way conditional edge sets first
+        {
+            let sets = self.conditional_edge_sets.lock().unwrap();
+            for set in sets.iter().filter(|s| s.from == current_task_id) {
+                let key = (set.path_fn)(context);
+                if let Some(target) = set.path_map.get(&key) {
+                    return Some(target.clone());
+                }
+            }
+        }
 
+        // 2. Check binary conditional edges and unconditional edges
+        let edges = self.edges.lock().unwrap();
         let mut fallback: Option<String> = None;
         for edge in edges.iter().filter(|e| e.from == current_task_id) {
             match &edge.condition {
@@ -359,6 +420,41 @@ impl GraphBuilder {
         F: Fn(&Context) -> bool + Send + Sync + 'static,
     {
         self.graph.add_conditional_edge(from, condition, yes, no);
+        self
+    }
+
+    /// Add N-way conditional edges using a path function and path map.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use graph_flow::{GraphBuilder, Context, Task, TaskResult, NextAction};
+    /// # use async_trait::async_trait;
+    /// # use std::sync::Arc;
+    /// # use std::collections::HashMap;
+    /// # struct T; #[async_trait] impl Task for T { fn id(&self) -> &str { "t" } async fn run(&self, _: Context) -> graph_flow::Result<TaskResult> { Ok(TaskResult::new(None, NextAction::End)) } }
+    /// let graph = GraphBuilder::new("test")
+    ///     .add_task(Arc::new(T) as Arc<dyn Task>)
+    ///     .add_conditional_edges(
+    ///         "classify",
+    ///         |ctx| ctx.get_sync::<String>("category").unwrap_or_default(),
+    ///         HashMap::from([
+    ///             ("bug".to_string(), "bug_handler".to_string()),
+    ///             ("feature".to_string(), "feature_handler".to_string()),
+    ///         ]),
+    ///     )
+    ///     .build();
+    /// ```
+    pub fn add_conditional_edges<F>(
+        self,
+        from: impl Into<String>,
+        path_fn: F,
+        path_map: HashMap<String, String>,
+    ) -> Self
+    where
+        F: Fn(&Context) -> String + Send + Sync + 'static,
+    {
+        self.graph.add_conditional_edges(from, path_fn, path_map);
         self
     }
 

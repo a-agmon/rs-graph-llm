@@ -102,6 +102,7 @@ impl SessionStorage for PostgresSessionStorage {
                 current_task_id,
                 status_message,
                 context,
+                task_history: Vec::new(),
             }))
         } else {
             Ok(None)

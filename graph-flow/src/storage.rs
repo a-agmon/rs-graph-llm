@@ -14,6 +14,10 @@ pub struct Session {
     /// Optional status message from the last executed task
     pub status_message: Option<String>,
     pub context: crate::context::Context,
+    /// Task history stack for GoBack navigation.
+    /// Each time a task completes, its ID is pushed here.
+    #[serde(default)]
+    pub task_history: Vec<String>,
 }
 
 impl Session {
@@ -24,6 +28,23 @@ impl Session {
             current_task_id: task_name.to_string(),
             status_message: None,
             context: Context::new(),
+            task_history: Vec::new(),
+        }
+    }
+
+    /// Push the current task onto history and advance to a new task.
+    pub fn advance_to(&mut self, next_task_id: String) {
+        self.task_history.push(self.current_task_id.clone());
+        self.current_task_id = next_task_id;
+    }
+
+    /// Go back to the previous task. Returns the previous task ID if available.
+    pub fn go_back(&mut self) -> Option<String> {
+        if let Some(prev) = self.task_history.pop() {
+            self.current_task_id = prev.clone();
+            Some(prev)
+        } else {
+            None
         }
     }
 }
