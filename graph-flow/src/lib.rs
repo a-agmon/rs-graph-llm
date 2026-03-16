@@ -174,6 +174,13 @@ pub mod storage;
 pub mod storage_postgres;
 pub mod task;
 pub mod fanout;
+pub mod streaming;
+pub mod typed_context;
+pub mod subgraph;
+pub mod mcp_tool;
+pub mod lance_storage;
+pub mod agents;
+pub mod thinking;
 
 // Re-export commonly used types
 pub use context::{ChatHistory, Context, MessageRole, SerializableMessage};
@@ -186,6 +193,13 @@ pub use storage::{
 pub use storage_postgres::PostgresSessionStorage;
 pub use task::{NextAction, Task, TaskResult};
 pub use fanout::FanOutTask;
+pub use streaming::{StreamChunk, StreamingRunner, StreamingTask};
+pub use typed_context::{State, TypedContext};
+pub use subgraph::SubgraphTask;
+pub use mcp_tool::{McpToolConfig, MockMcpToolTask};
+#[cfg(feature = "mcp")]
+pub use mcp_tool::McpToolTask;
+pub use lance_storage::LanceSessionStorage;
 
 #[cfg(test)]
 mod tests {
