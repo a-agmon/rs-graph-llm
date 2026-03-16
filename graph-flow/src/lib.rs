@@ -181,6 +181,7 @@ pub mod mcp_tool;
 pub mod lance_storage;
 pub mod agents;
 pub mod thinking;
+pub mod compat;
 
 // Re-export commonly used types
 pub use context::{ChatHistory, Context, MessageRole, SerializableMessage};

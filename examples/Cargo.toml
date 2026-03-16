@@ -1,4 +1,16 @@
 [[bin]]
+name = "researcher_agent"
+path = "researcher_agent.rs"
+
+[[bin]]
+name = "classifier_agent"
+path = "classifier_agent.rs"
+
+[[bin]]
+name = "yaml_agent"
+path = "yaml_agent.rs"
+
+[[bin]]
 name = "simple_example"
 path = "simple_example.rs"
 
