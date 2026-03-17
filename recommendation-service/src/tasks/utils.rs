@@ -1,12 +1,13 @@
 use anyhow::Result;
-use rig::prelude::*;
+use rig::client::CompletionClient;
 use tracing::info;
 
 /// Create an LLM agent using OpenRouter
-pub fn get_llm_agent() -> Result<rig::agent::Agent<rig::providers::openrouter::CompletionModel>> {
+pub fn get_llm_agent() -> Result<impl rig::completion::Chat> {
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
-    let client = rig::providers::openrouter::Client::new(&api_key);
+    let client = rig::providers::openrouter::Client::new(&api_key)
+        .map_err(|e| anyhow::anyhow!("Failed to create OpenRouter client: {}", e))?;
     Ok(client.agent("openai/gpt-4.1-mini").build())
 }
 
