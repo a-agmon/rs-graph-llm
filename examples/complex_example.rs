@@ -25,11 +25,11 @@ If you are not sure, ask a short clarifying question **instead** of returning JS
 "#;
 
 /// Very small wrapper around `rig` to obtain an agent that can answer our prompt.
-fn get_llm_agent() -> anyhow::Result<rig::agent::Agent<rig::providers::openrouter::CompletionModel>>
-{
+fn get_llm_agent() -> anyhow::Result<impl rig::completion::Chat> {
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
-    let client = rig::providers::openrouter::Client::new(&api_key);
+    let client = rig::providers::openrouter::Client::new(&api_key)
+        .map_err(|e| anyhow::anyhow!("Failed to create client: {}", e))?;
 
     Ok(client
         .agent("openai/gpt-4o-mini")
