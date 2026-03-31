@@ -3,7 +3,7 @@
   
   # graph-flow
   
-  ### High-Performance Workflow Framework
+  ### High-Performance Graph Workflow Framework
   
   *A type-safe and flexible framework for building complex and interactive workflows in Rust for AI Agents and more*
   
