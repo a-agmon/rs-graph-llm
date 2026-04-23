@@ -4,7 +4,7 @@ use graph_flow::{
     Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
     NextAction, PostgresSessionStorage, Session, SessionStorage, Task, TaskResult,
 };
-use rig::completion::Chat;
+use rig::completion::{Chat, Message};
 use rig::prelude::*;
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
@@ -78,7 +78,7 @@ impl Task for QueryRefinementTask {
                     Rewrite the following user query so that it is optimised for vector search. Only return the rewritten query.
                     Query: {user_query}"#
                 ),
-                vec![],
+                Vec::<Message>::new(),
             )
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?
@@ -301,7 +301,7 @@ impl Task for ValidationTask {
             .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
 
         let raw = agent
-            .chat(&prompt, vec![])
+            .chat(&prompt, Vec::<Message>::new())
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
