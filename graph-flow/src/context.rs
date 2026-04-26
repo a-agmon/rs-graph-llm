@@ -846,9 +846,7 @@ impl Context {
         match msg.role {
             MessageRole::User => Message::user(msg.content.clone()),
             MessageRole::Assistant => Message::assistant(msg.content.clone()),
-            // rig doesn't have a system message type, so we'll treat it as a user message
-            // with a system prefix
-            MessageRole::System => Message::user(format!("[SYSTEM] {}", msg.content)),
+            MessageRole::System => Message::system(msg.content.clone()),
         }
     }
 }
@@ -1029,13 +1027,35 @@ mod tests {
         let rig_messages = context.get_rig_messages().await;
         assert_eq!(rig_messages.len(), 3);
 
+        // Verify each message maps to the correct rig variant.
+        assert!(
+            matches!(&rig_messages[0], Message::User { .. }),
+            "Expected Message::User, got: {:?}",
+            rig_messages[0]
+        );
+        assert!(
+            matches!(&rig_messages[1], Message::Assistant { .. }),
+            "Expected Message::Assistant, got: {:?}",
+            rig_messages[1]
+        );
+        assert!(
+            matches!(&rig_messages[2], Message::System { content } if content == "System message"),
+            "Expected Message::System with correct content, got: {:?}",
+            rig_messages[2]
+        );
+
+        // Verify get_last_rig_messages tail ordering when the tail includes a system message.
         let last_two = context.get_last_rig_messages(2).await;
         assert_eq!(last_two.len(), 2);
-
-        // Test that the conversion works without panicking
-        // We can't easily verify the content since rig::Message doesn't expose it directly
-        // but we can verify the conversion completes without error
-        let _debug_output = format!("{:?}", rig_messages);
-        // Test passes if we reach this point without panicking
+        assert!(
+            matches!(&last_two[0], Message::Assistant { .. }),
+            "Expected Message::Assistant as second-to-last, got: {:?}",
+            last_two[0]
+        );
+        assert!(
+            matches!(&last_two[1], Message::System { .. }),
+            "Expected Message::System as last, got: {:?}",
+            last_two[1]
+        );
     }
 }

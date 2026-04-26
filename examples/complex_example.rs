@@ -3,7 +3,7 @@ use graph_flow::{
     Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
     InMemorySessionStorage, NextAction, Session, SessionStorage, Task, TaskResult,
 };
-use rig::completion::Chat;
+use rig::completion::{Chat, Message};
 use rig::prelude::*;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -61,7 +61,7 @@ impl Task for SentimentAnalysisTask {
 
         // We are not using chat history here for simplicity, but rig expects a vector – supply an empty one.
         let response = agent
-            .chat(&user_input, vec![])
+            .chat(&user_input, Vec::<Message>::new())
             .await
             .map_err(|e| graph_flow::GraphError::TaskExecutionFailed(e.to_string()))?;
 

@@ -23,3 +23,5 @@ Thumbs.db
 # ML Models and Caches
 .fastembed_cache/ 
 .claude/
+
+.cocoindex_code/
