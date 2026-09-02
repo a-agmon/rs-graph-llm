@@ -15,10 +15,10 @@ A high-performance, type-safe framework for building stateful, multi-agent LLM w
 
 ```toml
 [dependencies]
-graph-flow = { version = "0.6", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
+graph-flow = { version = "0.7", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
 ```
 
-Migrating from 0.5? See the [0.5 → 0.6 migration guide](https://github.com/a-agmon/rs-graph-llm/blob/main/graph-flow/ROADMAP.md).
+Migrating from an earlier version? See the [migration guides](https://github.com/a-agmon/rs-graph-llm/blob/main/graph-flow/ROADMAP.md) — 0.7 moves the `rig` feature to `rig-core` 0.42.
 
 ### Define a task
 
@@ -105,12 +105,16 @@ Guard rails: `GraphBuilder::with_task_timeout(duration)` bounds each task (defau
 ## LLM integration (feature `rig`)
 
 ```rust
-let chat_history = context.get_rig_messages();
-let response = agent.chat(&user_input, chat_history).await?;
+let mut chat_history = context.get_rig_messages();
+let response = agent.chat(&user_input, &mut chat_history).await?;
 
 context.add_user_message(user_input);
 context.add_assistant_message(response.clone());
 ```
+
+The `rig` feature pulls in `rig-core` alone, for the `rig_core::completion::Message`
+conversion. Building an agent (`Chat`, `Prompt`, `.agent()`) needs the companion
+`rig-agent` crate as a direct dependency of your own crate.
 
 Chat history is a capped ring buffer (default 1000 messages) and serializes with the session.
 

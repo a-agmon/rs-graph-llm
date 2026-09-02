@@ -196,7 +196,8 @@ Key dependencies include:
 - `axum`: Web framework
 - `graph-flow`: Workflow engine (local dependency)
 - `sqlx`: PostgreSQL driver
-- `rig-core`: LLM integration
+- `rig-core`: LLM provider clients and message types
+- `rig-agent`: Rig's classic agent runtime (`Chat`, `.agent()`)
 - `fastembed`: Embedding generation
 - `serde`: JSON serialization
 - `tracing`: Structured logging

@@ -16,18 +16,18 @@
 **graph-flow** combines the two ideas that make LangGraph pleasant to use — a graph execution engine for stateful workflows, and tight LLM ecosystem integration — and rebuilds them natively in Rust:
 
 - **[`graph-flow`](graph-flow/)** — the core graph execution library: task orchestration, session persistence, conditional routing, human-in-the-loop pauses
-- **[Rig](https://github.com/0xPlaygrounds/rig)** — Rust-native LLM integration and agent capabilities (optional `rig` feature)
+- **[Rig](https://github.com/0xPlaygrounds/rig)** — Rust-native LLM integration. The optional `rig` feature bridges `Context` chat history to `rig-core`'s `Message`; the agent runtime itself lives in the companion `rig-agent` crate
 
 You get LangGraph-style workflow design with Rust's performance and type safety, a clean database schema for session state, and flexible execution models — step-by-step, fire-and-forget, or a mix of both in the same graph.
 
 ## Repository Layout
 
-| Crate | What it shows |
-|---|---|
-| [`graph-flow/`](graph-flow/) | The framework library (published to crates.io) |
-| [`insurance-claims-service/`](insurance-claims-service/) | Production-style HTTP service: LLM-driven claim intake, conditional routing, human-in-the-loop approval |
-| [`recommendation-service/`](recommendation-service/) | RAG recommendation system with vector search |
-| [`examples/`](examples/) | Small progressive examples: `simple_example`, `complex_example`, `recommendation_flow`, `fanout_basic`, `terminal_client` |
+| Crate                                                    | What it shows                                                                                                             |
+|----------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| [`graph-flow/`](graph-flow/)                             | The framework library (published to crates.io)                                                                            |
+| [`insurance-claims-service/`](insurance-claims-service/) | Production-style HTTP service: LLM-driven claim intake, conditional routing, human-in-the-loop approval                   |
+| [`recommendation-service/`](recommendation-service/)     | RAG recommendation system with vector search                                                                              |
+| [`examples/`](examples/)                                 | Small progressive examples: `simple_example`, `complex_example`, `recommendation_flow`, `fanout_basic`, `terminal_client` |
 
 > **Start here**: read [`examples/simple_example.rs`](examples/simple_example.rs) for the core concepts, then the services for real-world patterns.
 
@@ -35,7 +35,9 @@ You get LangGraph-style workflow design with Rust's performance and type safety,
 
 ```toml
 [dependencies]
-graph-flow = { version = "0.6", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
+graph-flow = { version = "0.7", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
+rig-core = "0.42"                                     # provider clients + Message
+rig-agent = "0.42"                                    # the agent runtime (Chat, Prompt, .agent())
 ```
 
 ### 1. Define tasks
@@ -200,20 +202,25 @@ graph TD
 With the `rig` feature, chat history stored in the `Context` converts directly to Rig messages:
 
 ```rust
-use rig::providers::openrouter;
+// `graph-flow`'s `rig` feature needs only `rig-core` (for `Message`).
+// The agent runtime — `Chat`, `Prompt`, `.agent()` — lives in `rig-agent`.
+use rig_agent::prelude::*;
+use rig_core::providers::openrouter;
 
 async fn run(&self, context: Context) -> graph_flow::Result<TaskResult> {
     let user_input: String = context.get("user_input").unwrap();
 
-    let client = openrouter::Client::new(&api_key);
+    let client = openrouter::Client::new(&api_key)
+        .map_err(|e| graph_flow::GraphError::TaskExecutionFailed(e.to_string()))?;
     let agent = client
         .agent("openai/gpt-4o-mini")
         .preamble("You are a helpful insurance assistant")
         .build();
 
-    // Conversation context for the LLM
-    let chat_history = context.get_rig_messages();
-    let response = agent.chat(&user_input, chat_history).await?;
+    // Conversation context for the LLM. `chat` seeds the request from this
+    // vector and appends the turn's committed messages back into it.
+    let mut chat_history = context.get_rig_messages();
+    let response = agent.chat(&user_input, &mut chat_history).await?;
 
     // Persist the exchange
     context.add_user_message(user_input);
