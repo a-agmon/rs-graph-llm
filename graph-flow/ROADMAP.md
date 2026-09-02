@@ -82,6 +82,64 @@ session belongs to a non-default graph.
 
 ---
 
+# Migrating from 0.6 to 0.7
+
+`0.7.0` carries one breaking change, and it is entirely about the `rig` feature:
+the feature now builds against **`rig-core` 0.42** instead of 0.35. Nothing in
+graph-flow's own API changed — but `get_rig_messages()` / `get_last_rig_messages()`
+return `Vec<rig_core::completion::Message>`, so that type's identity moved with it.
+Crates that don't enable `rig` are unaffected.
+
+## Pin rig-core 0.42 in your own crate
+
+A `rig-core 0.35` requirement of your own would link a *second* rig-core and make
+`get_rig_messages()` fail to typecheck against it ("two types with similar names").
+
+```toml
+# 0.6
+graph-flow = { version = "0.6", features = ["rig"] }
+rig-core = "0.35"
+
+# 0.7
+graph-flow = { version = "0.7", features = ["rig"] }
+rig-core = "0.42"
+rig-agent = "0.42"   # only if you build agents; see below
+```
+
+## The agent runtime moved to `rig-agent`
+
+rig 0.42 split the classic runtime out of `rig-core`. graph-flow depends on
+`rig-core` alone (it only needs `Message`); add `rig-agent` yourself for agents.
+
+```rust
+// 0.6
+use rig::completion::Chat;
+use rig::providers::openrouter;
+
+// 0.7
+use rig_agent::prelude::*;          // Chat, Prompt, AgentClientExt, Message
+use rig_core::providers::openrouter;
+```
+
+The crate's lib name also changed: `rig::` paths become `rig_core::`.
+
+## `Chat::chat` borrows the history mutably
+
+It now takes `&mut Vec<Message>` and appends the turn's committed messages to it,
+instead of consuming any `IntoIterator`.
+
+```rust
+// 0.6
+let history = context.get_rig_messages();
+let response = agent.chat(&user_input, history).await?;
+
+// 0.7
+let mut history = context.get_rig_messages();
+let response = agent.chat(&user_input, &mut history).await?;
+```
+
+---
+
 # Migrating from 0.5 to 0.6
 
 ## Context calls: drop `.await`, handle `Result` on `set`

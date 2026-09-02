@@ -96,10 +96,16 @@ RAG-based recommendation system with vector search integration.
 
 #### LLM Integration (via Rig)
 ```rust
+// `Chat`/`Prompt`/`.agent()` come from `rig-agent`; `Message` and the
+// provider clients come from `rig-core`.
+use rig_agent::prelude::*;
+
 let agent = client.agent("openai/gpt-4o-mini")
     .preamble("System prompt")
     .build();
-let response = agent.chat(&user_input, context.get_rig_messages().await).await?;
+// `chat` takes `&mut Vec<Message>` and appends the turn's committed messages.
+let mut chat_history = context.get_rig_messages();
+let response = agent.chat(&user_input, &mut chat_history).await?;
 ```
 
 #### HTTP Service Wrapper
