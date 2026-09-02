@@ -3,8 +3,7 @@ use graph_flow::{
     Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
     InMemorySessionStorage, NextAction, Session, SessionStorage, Task, TaskResult,
 };
-use rig::completion::{Chat, Message};
-use rig::prelude::*;
+use rig_agent::prelude::*;
 use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{Level, info};
@@ -25,10 +24,10 @@ If you are not sure, ask a short clarifying question **instead** of returning JS
 "#;
 
 /// Very small wrapper around `rig` to obtain an agent that can answer our prompt.
-fn get_llm_agent() -> anyhow::Result<impl rig::completion::Chat> {
+fn get_llm_agent() -> anyhow::Result<impl rig_agent::completion::Chat> {
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
-    let client = rig::providers::openrouter::Client::new(&api_key)
+    let client = rig_core::providers::openrouter::Client::new(&api_key)
         .map_err(|e| anyhow::anyhow!("Failed to create client: {}", e))?;
 
     Ok(client
@@ -59,9 +58,11 @@ impl Task for SentimentAnalysisTask {
             }
         };
 
-        // We are not using chat history here for simplicity, but rig expects a vector – supply an empty one.
+        // We are not using chat history here for simplicity, but rig's `chat` borrows a
+        // `&mut Vec<Message>` it appends the turn to – supply an empty one and drop it afterwards.
+        let mut chat_history: Vec<Message> = Vec::new();
         let response = agent
-            .chat(&user_input, Vec::<Message>::new())
+            .chat(&user_input, &mut chat_history)
             .await
             .map_err(|e| graph_flow::GraphError::TaskExecutionFailed(e.to_string()))?;
 

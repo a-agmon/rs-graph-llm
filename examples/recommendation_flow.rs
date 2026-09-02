@@ -4,8 +4,7 @@ use graph_flow::{
     Context, ExecutionStatus, FlowRunner, GraphBuilder, GraphStorage, InMemoryGraphStorage,
     NextAction, PostgresSessionStorage, Session, SessionStorage, Task, TaskResult,
 };
-use rig::completion::{Chat, Message};
-use rig::prelude::*;
+use rig_agent::prelude::*;
 use serde::Deserialize;
 use sqlx::postgres::PgPoolOptions;
 use std::sync::Arc;
@@ -18,10 +17,10 @@ const MAX_RETRIES: u32 = 3;
 // -----------------------------------------------------------------------------
 // A wrapper around `rig` so the example compiles only when OPENROUTER_API_KEY is set
 // -----------------------------------------------------------------------------
-fn get_llm_agent() -> anyhow::Result<impl rig::completion::Chat> {
+fn get_llm_agent() -> anyhow::Result<impl rig_agent::completion::Chat> {
     let api_key = std::env::var("OPENROUTER_API_KEY")
         .map_err(|_| anyhow::anyhow!("OPENROUTER_API_KEY not set"))?;
-    let client = rig::providers::openrouter::Client::new(&api_key)
+    let client = rig_core::providers::openrouter::Client::new(&api_key)
         .map_err(|e| anyhow::anyhow!("Failed to create client: {}", e))?;
     Ok(client.agent("openai/gpt-4.1-mini").build())
 }
@@ -70,6 +69,7 @@ impl Task for QueryRefinementTask {
         let agent = get_llm_agent()
             .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
 
+        let mut history: Vec<Message> = Vec::new();
         let refined = agent
             .chat(
                 &format!(
@@ -78,7 +78,7 @@ impl Task for QueryRefinementTask {
                     Rewrite the following user query so that it is optimised for vector search. Only return the rewritten query.
                     Query: {user_query}"#
                 ),
-                Vec::<Message>::new(),
+                &mut history,
             )
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?
@@ -198,7 +198,7 @@ impl Task for AnswerGenerationTask {
         );
 
         // Get the full chat history for conversational memory
-        let history = context.get_rig_messages();
+        let mut history = context.get_rig_messages();
 
         let agent = get_llm_agent()
             .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
@@ -230,7 +230,7 @@ impl Task for AnswerGenerationTask {
         };
 
         let answer = agent
-            .chat(&prompt, history)
+            .chat(&prompt, &mut history)
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
@@ -298,8 +298,9 @@ impl Task for ValidationTask {
         let agent = get_llm_agent()
             .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
 
+        let mut history: Vec<Message> = Vec::new();
         let raw = agent
-            .chat(&prompt, Vec::<Message>::new())
+            .chat(&prompt, &mut history)
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
