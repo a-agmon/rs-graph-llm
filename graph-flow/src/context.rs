@@ -83,11 +83,12 @@
 //! context.add_assistant_message("The capital of France is Paris.".to_string());
 //!
 //! // Get messages in rig format for LLM calls
-//! let rig_messages = context.get_rig_messages();
+//! let mut rig_messages = context.get_rig_messages();
 //! let recent_messages = context.get_last_rig_messages(10);
 //!
-//! // Use with rig's completion API
-//! // let response = agent.chat(&user_input, rig_messages).await?;
+//! // Use with rig-agent's completion API, whose `chat` borrows the history
+//! // mutably and appends the turn's committed messages to it:
+//! // let response = agent.chat(&user_input, &mut rig_messages).await?;
 //! # }
 //! ```
 
@@ -101,7 +102,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use crate::error::GraphError;
 
 #[cfg(feature = "rig")]
-use rig::completion::Message;
+use rig_core::completion::Message;
 
 /// Represents the role of a message in a conversation.
 ///
@@ -116,7 +117,7 @@ pub enum MessageRole {
     System,
 }
 
-/// A serializable message that can be converted to/from rig::completion::Message.
+/// A serializable message that can be converted to/from rig_core::completion::Message.
 ///
 /// This struct provides a unified message format that can be stored, serialized,
 /// and optionally converted to other formats like rig's Message type.
@@ -523,7 +524,7 @@ impl Context {
     // Rig integration methods (only available when rig feature is enabled)
 
     #[cfg(feature = "rig")]
-    /// Get all chat history messages converted to rig::completion::Message format.
+    /// Get all chat history messages converted to rig_core::completion::Message format.
     ///
     /// This method is only available when the "rig" feature is enabled.
     pub fn get_rig_messages(&self) -> Vec<Message> {
@@ -531,7 +532,7 @@ impl Context {
     }
 
     #[cfg(feature = "rig")]
-    /// Get the last N messages converted to rig::completion::Message format.
+    /// Get the last N messages converted to rig_core::completion::Message format.
     ///
     /// This method is only available when the "rig" feature is enabled.
     pub fn get_last_rig_messages(&self, n: usize) -> Vec<Message> {
@@ -541,7 +542,7 @@ impl Context {
 
 #[cfg(feature = "rig")]
 impl From<SerializableMessage> for Message {
-    /// Convert a [`SerializableMessage`] into a `rig::completion::Message`,
+    /// Convert a [`SerializableMessage`] into a `rig_core::completion::Message`,
     /// moving the content instead of cloning it.
     ///
     /// Only available when the "rig" feature is enabled.
