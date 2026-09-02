@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Result, Task, TaskResult};
-use rig::completion::Chat;
+use rig_agent::completion::Chat;
 use serde::Deserialize;
 use tracing::info;
 
@@ -65,7 +65,7 @@ impl Task for InsuranceTypeClassifierTask {
             .ok_or_else(|| GraphError::ContextError("user_input not found".to_string()))?;
 
         // Get message history from context in rig format
-        let chat_history = context.get_rig_messages();
+        let mut chat_history = context.get_rig_messages();
         context.add_user_message(user_input.clone());
 
         // Create agent with classification prompt
@@ -73,7 +73,7 @@ impl Task for InsuranceTypeClassifierTask {
 
         // Use chat to get response with history
         let response = agent
-            .chat(&user_input, chat_history)
+            .chat(&user_input, &mut chat_history)
             .await
             .map_err(|e| GraphError::TaskExecutionFailed(e.to_string()))?;
 

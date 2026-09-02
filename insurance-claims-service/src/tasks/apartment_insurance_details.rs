@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Result, Task, TaskResult};
-use rig::completion::Chat;
+use rig_agent::completion::Chat;
 use serde::Deserialize;
 use tracing::info;
 
@@ -72,13 +72,13 @@ impl Task for ApartmentInsuranceDetailsTask {
         );
 
         // Get message history from context in rig format
-        let chat_history = context.get_rig_messages();
+        let mut chat_history = context.get_rig_messages();
         // Create agent with apartment details collection prompt
         let agent = get_llm_agent(APARTMENT_INSURANCE_DETAILS_PROMPT)?;
 
         // Use chat to get response with history
         let response = agent
-            .chat(&user_input, chat_history)
+            .chat(&user_input, &mut chat_history)
             .await
             .map_err(|e| GraphError::TaskExecutionFailed(e.to_string()))?;
 
