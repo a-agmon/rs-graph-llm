@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use chrono::Datelike;
 use graph_flow::{Context, GraphError, NextAction, Result, Task, TaskResult};
 use reqwest;
-use rig::completion::Prompt;
+use rig_agent::completion::Prompt;
 use serde_json::Value;
 use tracing::{error, info, warn};
 

@@ -2,7 +2,7 @@ use super::utils::get_llm_agent;
 use crate::models::MedicalDocument;
 use async_trait::async_trait;
 use graph_flow::{Context, GraphError, NextAction, Result, Task, TaskResult};
-use rig::completion::Prompt;
+use rig_agent::completion::Prompt;
 use tracing::{error, info};
 
 pub struct SummaryIntegrationTask;
