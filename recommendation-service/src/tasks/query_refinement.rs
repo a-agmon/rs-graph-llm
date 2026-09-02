@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use graph_flow::GraphError::TaskExecutionFailed;
 use graph_flow::{Context, NextAction, Task, TaskResult};
-use rig::completion::{Chat, Message};
+use rig_agent::completion::Chat;
+use rig_core::completion::Message;
 use tracing::info;
 
 use super::utils::get_llm_agent;
@@ -23,6 +24,7 @@ impl Task for QueryRefinementTask {
         let agent = get_llm_agent()
             .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
 
+        let mut history: Vec<Message> = Vec::new();
         let refined = agent
             .chat(
                 &format!(
@@ -31,7 +33,7 @@ impl Task for QueryRefinementTask {
                     Rewrite the following user query so that it is optimised for vector search. Only return the rewritten query.
                     Query: {user_query}"#
                 ),
-                Vec::<Message>::new(),
+                &mut history,
             )
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?

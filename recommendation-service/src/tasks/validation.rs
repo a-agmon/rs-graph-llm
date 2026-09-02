@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use graph_flow::GraphError::TaskExecutionFailed;
 use graph_flow::{Context, NextAction, Task, TaskResult};
-use rig::completion::{Chat, Message};
+use rig_agent::completion::Chat;
+use rig_core::completion::Message;
 use tracing::{error, info};
 
 use super::types::{ValidationResult, MAX_RETRIES};
@@ -55,8 +56,9 @@ impl Task for ValidationTask {
         let agent = get_llm_agent()
             .map_err(|e| TaskExecutionFailed(format!("Failed to initialize LLM agent: {}", e)))?;
 
+        let mut chat_history: Vec<Message> = Vec::new();
         let raw = agent
-            .chat(&prompt, Vec::<Message>::new())
+            .chat(&prompt, &mut chat_history)
             .await
             .map_err(|e| TaskExecutionFailed(format!("LLM chat failed: {}", e)))?;
 
