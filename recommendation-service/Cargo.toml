@@ -19,4 +19,5 @@ tower = { workspace = true }
 tower-http = { workspace = true }
 sqlx = { workspace = true }
 rig-core = { workspace = true }
+rig-agent = { workspace = true }
 fastembed = "5.1.0" 

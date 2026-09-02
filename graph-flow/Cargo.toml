@@ -1,6 +1,6 @@
 [package]
 name = "graph-flow"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 authors = ["Alon Agmon"]
 description = "A high-performance, type-safe framework for building multi-agent workflow systems in Rust"
@@ -30,7 +30,12 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 dashmap = "6.1"
 chrono = { version = "0.4", features = ["serde"] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "json", "macros", "uuid"] }
-rig-core = { workspace = true, optional = true }
+# Not inherited from the workspace: this crate needs only `completion::Message`,
+# and cargo ignores `default-features = false` on an inherited dependency. Opting
+# out keeps rig-core's `derive` (proc-macro) and `reqwest`/`rustls` defaults out of
+# downstream builds that enable graph-flow's `rig` feature. The workspace's service
+# crates declare rig-core themselves and still get the defaults.
+rig-core = { version = "0.42", optional = true, default-features = false }
 
 [features]
 default = []
