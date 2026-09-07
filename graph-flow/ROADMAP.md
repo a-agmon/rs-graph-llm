@@ -82,6 +82,31 @@ session belongs to a non-default graph.
 
 ---
 
+# Migrating from 0.7 to 0.8
+
+`0.8.0` makes PostgreSQL / SQLx an **optional** dependency behind a new `postgres`
+feature. The feature is **enabled by default**, so crates on default features are
+unaffected: `PostgresSessionStorage` and its `sqlx` dependency are still compiled in.
+
+The one breaking case is `default-features = false`. Before 0.8, `sqlx` was a hard
+dependency, so `PostgresSessionStorage` existed in every build. Opting out of default
+features now drops it. Re-enable it explicitly if you need it:
+
+```toml
+# default features — Postgres included, no change needed
+graph-flow = "0.8"
+
+# opted out of defaults? add `postgres` back to keep PostgresSessionStorage
+graph-flow = { version = "0.8", default-features = false, features = ["postgres"] }
+```
+
+Turning the feature *off* is the point: it removes `sqlx` — and the native-SQLite
+transitive dependencies it pulls in — from the tree, so an application embedding a
+different SQLite backend can resolve its dependencies. `InMemorySessionStorage` and
+the rest of the API are unaffected either way.
+
+---
+
 # Migrating from 0.6 to 0.7
 
 `0.7.0` carries one breaking change, and it is entirely about the `rig` feature:

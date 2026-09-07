@@ -22,7 +22,7 @@ PostgreSQL support is enabled by default; set `default-features = false` to excl
 
 ```toml
 [dependencies]
-graph-flow = { version = "0.7", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
+graph-flow = { version = "0.8", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
 ```
 
 Migrating from an earlier version? See the [migration guides](https://github.com/a-agmon/rs-graph-llm/blob/main/graph-flow/ROADMAP.md) — 0.7 moves the `rig` feature to `rig-core` 0.42.
