@@ -29,7 +29,7 @@ tracing = "0.1"
 uuid = { version = "1.10", features = ["v4", "serde"] }
 dashmap = "6.1"
 chrono = { version = "0.4", features = ["serde"] }
-sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "json", "macros", "uuid"] }
+sqlx = { version = "0.8.6", optional = true, default-features = false, features = ["runtime-tokio-rustls", "postgres", "json"] }
 # Not inherited from the workspace: this crate needs only `completion::Message`,
 # and cargo ignores `default-features = false` on an inherited dependency. Opting
 # out keeps rig-core's `derive` (proc-macro) and `reqwest`/`rustls` defaults out of
@@ -38,5 +38,6 @@ sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "postgres", "jso
 rig-core = { version = "0.42", optional = true, default-features = false }
 
 [features]
-default = []
+default = ["postgres"]
+postgres = ["dep:sqlx"]
 rig = ["dep:rig-core"]

@@ -11,6 +11,13 @@ A high-performance, type-safe framework for building stateful, multi-agent LLM w
 - **Human-in-the-Loop**: Pause on `WaitForInput`, resume when the user answers
 - **Parallel Blocks**: `FanOutTask` runs multiple tasks concurrently inside a single node
 
+## Cargo features
+
+- `postgres` (enabled by default): provides `PostgresSessionStorage` and its SQLx dependency.
+- `rig`: enables Rig message integration independently of storage.
+
+PostgreSQL support is enabled by default; set `default-features = false` to exclude it.
+
 ## Quick Start
 
 ```toml

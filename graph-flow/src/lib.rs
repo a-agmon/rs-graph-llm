@@ -172,13 +172,14 @@
 //! ## Storage Backends
 //!
 //! - [`InMemorySessionStorage`]: For development and testing
-//! - [`PostgresSessionStorage`]: For production use with PostgreSQL
+//! - `PostgresSessionStorage`: PostgreSQL storage, available with the `postgres` feature
 
 pub mod context;
 pub mod error;
 pub mod graph;
 pub mod runner;
 pub mod storage;
+#[cfg(feature = "postgres")]
 pub mod storage_postgres;
 pub mod task;
 pub mod fanout;
@@ -191,6 +192,7 @@ pub use runner::FlowRunner;
 pub use storage::{
     GraphStorage, InMemoryGraphStorage, InMemorySessionStorage, Session, SessionStorage,
 };
+#[cfg(feature = "postgres")]
 pub use storage_postgres::PostgresSessionStorage;
 pub use task::{NextAction, Task, TaskResult};
 pub use fanout::FanOutTask;

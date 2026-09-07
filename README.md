@@ -31,6 +31,13 @@ You get LangGraph-style workflow design with Rust's performance and type safety,
 
 > **Start here**: read [`examples/simple_example.rs`](examples/simple_example.rs) for the core concepts, then the services for real-world patterns.
 
+## Cargo features
+
+- `postgres` (enabled by default): provides `PostgresSessionStorage` and its SQLx dependency.
+- `rig`: enables Rig message integration independently of storage.
+
+PostgreSQL support is enabled by default; set `default-features = false` to exclude it.
+
 ## Quick Start
 
 ```toml
@@ -282,7 +289,7 @@ Both backends implement the same `SessionStorage` trait — swap freely between 
 // In-memory (development)
 let storage = Arc::new(InMemorySessionStorage::new());
 
-// PostgreSQL (production)
+// PostgreSQL (requires the `postgres` feature)
 let storage = Arc::new(PostgresSessionStorage::connect(&database_url).await?);
 
 // Or bring your own pool configuration

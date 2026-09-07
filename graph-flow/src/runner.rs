@@ -240,7 +240,11 @@ impl FlowRunner {
     ///
     /// ## With PostgreSQL Storage
     ///
+    /// Enable the `postgres` Cargo feature to use this backend.
+    ///
     /// ```rust,no_run
+    /// # #[cfg(feature = "postgres")]
+    /// # mod postgres_example {
     /// use graph_flow::{FlowRunner, Graph, PostgresSessionStorage};
     /// use std::sync::Arc;
     ///
@@ -252,6 +256,7 @@ impl FlowRunner {
     /// );
     /// let runner = FlowRunner::new(graph, storage);
     /// # Ok(())
+    /// # }
     /// # }
     /// ```
     pub fn new(graph: Arc<Graph>, storage: Arc<dyn SessionStorage>) -> Self {
