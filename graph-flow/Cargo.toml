@@ -19,7 +19,15 @@ exclude = [
 ]
 
 [dependencies]
-tokio = { version = "1.40", features = ["full"] }
+# graph-flow only needs the runtime, macros, time and multi-thread pieces;
+# `full` pulled in net/process/fs/signal/io for library consumers that never
+# use them. Examples and the service crates still opt into `full` themselves.
+tokio = { version = "1.40", default-features = false, features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "time",
+] }
 async-trait = "0.1"
 anyhow = "1.0"
 thiserror = "2.0.16"
