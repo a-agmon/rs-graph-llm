@@ -1,6 +1,6 @@
 [package]
 name = "graph-flow"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 authors = ["Alon Agmon"]
 description = "A high-performance, type-safe framework for building multi-agent workflow systems in Rust"
@@ -19,7 +19,11 @@ exclude = [
 ]
 
 [dependencies]
-tokio = { version = "1.40", features = ["full"] }
+# The library itself needs only `rt` (JoinSet) and `time` (timeout). `full`
+# pulled net/process/fs/signal/io into every consumer; the macro and
+# multi-thread runtime features used by tests and doc examples live under
+# [dev-dependencies]. Examples and the service crates opt into `full` themselves.
+tokio = { version = "1.40", default-features = false, features = ["rt", "time"] }
 async-trait = "0.1"
 anyhow = "1.0"
 thiserror = "2.0.16"
@@ -36,6 +40,10 @@ sqlx = { version = "0.8.6", optional = true, default-features = false, features 
 # downstream builds that enable graph-flow's `rig` feature. The workspace's service
 # crates declare rig-core themselves and still get the defaults.
 rig-core = { version = "0.42", optional = true, default-features = false }
+
+[dev-dependencies]
+# `#[tokio::test]` and the `#[tokio::main]` doc examples need these; consumers don't.
+tokio = { version = "1.40", features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = ["postgres"]

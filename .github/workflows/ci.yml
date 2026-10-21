@@ -1,0 +1,47 @@
+# Builds and tests the published crate, `graph-flow`, under every feature
+# combination it supports. The trimmed Tokio feature set (0.8.1) is only
+# honest while the `--no-default-features` row stays green.
+#
+# The example and service crates are deliberately not built here: they pull
+# `ort-sys`, which downloads ONNX Runtime binaries at build time.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  graph-flow:
+    name: graph-flow (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default features
+            key: default
+            flags: ""
+          - name: no default features
+            key: minimal
+            flags: "--no-default-features"
+          - name: rig only
+            key: rig
+            flags: "--no-default-features --features rig"
+          - name: all features
+            key: all
+            flags: "--all-features"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.key }}
+      - name: Check lib, tests and examples
+        run: cargo check -p graph-flow --all-targets ${{ matrix.flags }}
+      - name: Test
+        run: cargo test -p graph-flow ${{ matrix.flags }}
