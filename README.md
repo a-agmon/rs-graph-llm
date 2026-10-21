@@ -43,6 +43,7 @@ PostgreSQL support is enabled by default; set `default-features = false` to excl
 ```toml
 [dependencies]
 graph-flow = { version = "0.8", features = ["rig"] }  # drop "rig" if you don't need LLM helpers
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }  # your async runtime; graph-flow enables only what it uses
 rig-core = "0.42"                                     # provider clients + Message
 rig-agent = "0.42"                                    # the agent runtime (Chat, Prompt, .agent())
 ```
