@@ -82,6 +82,30 @@ session belongs to a non-default graph.
 
 ---
 
+# Migrating from 0.8.0 to 0.8.1
+
+`0.8.1` stops enabling Tokio's `full` feature. graph-flow now turns on only the
+Tokio features it uses itself (`rt` and `time`), so library consumers no longer
+pay for `net`, `process`, `fs`, `signal` and `io-std`, nor for the `tokio-macros`
+proc-macro crate.
+
+Nothing in graph-flow's API changed. The one thing that can break is a crate that
+declared Tokio without features and relied on graph-flow enabling them
+transitively. Enable what your own code uses:
+
+```toml
+# before: worked by accident, through graph-flow's `full`
+tokio = "1"
+
+# 0.8.1: name the features you use
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+With default features (`postgres`) on, `sqlx` still enables `net`, `fs`, `io-util`
+and `sync`, so most applications will notice no difference at all.
+
+---
+
 # Migrating from 0.7 to 0.8
 
 `0.8.0` makes PostgreSQL / SQLx an **optional** dependency behind a new `postgres`
