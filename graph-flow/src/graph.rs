@@ -105,7 +105,7 @@ impl Graph {
                     if result.next_action == NextAction::ContinueAndExecute {
                         steps += 1;
                         if let Some(max) = self.max_execution_steps
-                            && steps >= max
+                            && steps > max
                         {
                             return Err(GraphError::TaskExecutionFailed(format!(
                                 "Aborted after {} chained ContinueAndExecute steps \
@@ -401,4 +401,85 @@ pub enum ExecutionStatus {
     WaitingForInput,
     /// Workflow completed successfully
     Completed,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+
+    struct ActionTask {
+        id: &'static str,
+        action: NextAction,
+    }
+
+    #[async_trait]
+    impl Task for ActionTask {
+        fn id(&self) -> &str {
+            self.id
+        }
+
+        async fn run(&self, _context: Context) -> Result<TaskResult> {
+            Ok(TaskResult::new(None, self.action.clone()))
+        }
+    }
+
+    #[tokio::test]
+    async fn max_execution_steps_allows_the_configured_number_of_hops() {
+        let start = Arc::new(ActionTask {
+            id: "start",
+            action: NextAction::ContinueAndExecute,
+        });
+        let end = Arc::new(ActionTask {
+            id: "end",
+            action: NextAction::End,
+        });
+        let graph = GraphBuilder::new("bounded")
+            .add_task(start.clone())
+            .add_task(end.clone())
+            .add_edge(start.id(), end.id())
+            .with_max_execution_steps(1)
+            .build()
+            .unwrap();
+        let mut session = Session::new_from_task("session".to_string(), start.id());
+
+        let result = graph.execute_session(&mut session).await.unwrap();
+
+        assert!(matches!(result.status, ExecutionStatus::Completed));
+        assert_eq!(session.current_task_id, "end");
+    }
+
+    #[tokio::test]
+    async fn max_execution_steps_stops_chains_over_the_limit() {
+        let start = Arc::new(ActionTask {
+            id: "start",
+            action: NextAction::ContinueAndExecute,
+        });
+        let middle = Arc::new(ActionTask {
+            id: "middle",
+            action: NextAction::ContinueAndExecute,
+        });
+        let end = Arc::new(ActionTask {
+            id: "end",
+            action: NextAction::End,
+        });
+        let graph = GraphBuilder::new("bounded")
+            .add_task(start.clone())
+            .add_task(middle.clone())
+            .add_task(end.clone())
+            .add_edge(start.id(), middle.id())
+            .add_edge(middle.id(), end.id())
+            .with_max_execution_steps(1)
+            .build()
+            .unwrap();
+        let mut session = Session::new_from_task("session".to_string(), start.id());
+
+        let error = graph.execute_session(&mut session).await.unwrap_err();
+
+        assert!(matches!(
+            error,
+            GraphError::TaskExecutionFailed(message)
+                if message.contains("Aborted after 2 chained ContinueAndExecute steps")
+        ));
+    }
 }
